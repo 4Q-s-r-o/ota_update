@@ -18,9 +18,6 @@ import 'package:ota_update/ota_update.dart';
 
 // RUN OTA UPDATE 
 try {
-  // INITIALIZE
-  OtaUpdate otaUpdate = OtaUpdate();
-  
   // START LISTENING FOR DOWNLOAD PROGRESS REPORTING EVENTS
   try {
     //LINK CONTAINS APK OF FLUTTER HELLO WORLD FROM FLUTTER SDK EXAMPLES
