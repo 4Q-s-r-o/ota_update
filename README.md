@@ -32,11 +32,21 @@ try {
 ```
 
 ## Statuses
-* DOWNLOADING: status for events during downloading phase. event value is download progress percentage
-* INSTALLING: event status that is sent just before triggering installation intent. event value is null.
-* ALREADY_RUNNING_ERROR: sent when 'execute' method is called before previous run finished. event value is null.
-* PERMISSION_NOT_GRANTED_ERROR: sent when user refused to grant required permissions. event value is null.
-* INTERNAL_ERROR: sent in all other error cases. event value is underlying error message
+* DOWNLOADING: 
+    * status for events during downloading phase
+    * event value is download progress percentage
+* INSTALLING: 
+    * event status that is sent just before triggering installation intent
+    * event value is null
+* ALREADY_RUNNING_ERROR: 
+    * sent when 'execute' method is called before previous run finished
+    * event value is null
+* PERMISSION_NOT_GRANTED_ERROR: 
+    * sent when user refused to grant required permissions
+    * event value is null.
+* INTERNAL_ERROR: 
+    * sent in all other error cases
+    * event value is underlying error message
 
 ## TODO
 * restrict download to specific connection type (mobile, wifi)
