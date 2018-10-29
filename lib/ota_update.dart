@@ -3,20 +3,36 @@ import 'dart:async';
 import 'package:flutter/services.dart';
 
 class OtaUpdate {
-  static const MethodChannel _channel = const MethodChannel('sk.fourq.ota_update');
-  static const EventChannel _progressChannel = const EventChannel('sk.fourq.ota_update_progress');
-  Stream<String> _progressChannelEvents;
+  static const EventChannel _progressChannel = const EventChannel('sk.fourq.ota_update');
+  Stream<OtaEvent> _progressStream;
 
-  Future<bool> execute(String url) async {
-    return await _channel.invokeMethod('execute', {"url": url});
-  }
-
-  Stream<String> get progressChannelEvents {
-    if (_progressChannelEvents == null) {
-      _progressChannelEvents = _progressChannel
-          .receiveBroadcastStream()
-          .map((dynamic event) => event.toString());
+  Stream<OtaEvent> execute(String url) {
+    if (_progressStream == null) {
+      _progressStream = _progressChannel.receiveBroadcastStream(
+        {"url": url},
+      ).map(
+        (dynamic event) => _toOtaEvent(event.cast<String>()),
+      );
     }
-    return _progressChannelEvents;
+    return _progressStream;
   }
+
+  OtaEvent _toOtaEvent(List<String> event) {
+    return OtaEvent()
+      ..status = OtaStatus.values[int.parse(event[0])]
+      ..value = event[1];
+  }
+}
+
+class OtaEvent {
+  OtaStatus status;
+  String value;
+}
+
+enum OtaStatus {
+  DOWNLOADING,
+  INSTALLING,
+  ALREADY_RUNNING_ERROR,
+  PERMISSION_NOT_GRANTED_ERROR,
+  INTERNAL_ERROR
 }

@@ -11,7 +11,7 @@ class MyApp extends StatefulWidget {
 }
 
 class _MyAppState extends State<MyApp> {
-  bool updateStatus;
+  OtaEvent currentEvent;
 
   @override
   void initState() {
@@ -21,12 +21,12 @@ class _MyAppState extends State<MyApp> {
 
   Future<void> tryOtaUpdate() async {
     try {
-      OtaUpdate otaUpdate = OtaUpdate();
-      otaUpdate.progressChannelEvents.listen((String progress) {
-        print('PROGRESS: $progress');
-      });
-      //LINK CONTAINES APK OF FLUTTER HELLO WORLD FROM FLUTTER SDK EXAMPLES
-      updateStatus = await otaUpdate.execute('https://test1.4q.sk/turbo.apk');
+      //LINK CONTAINS APK OF FLUTTER HELLO WORLD FROM FLUTTER SDK EXAMPLES
+      OtaUpdate().execute('https://test1.4q.sk/flutter_hello_world.apk').listen(
+        (OtaEvent event) {
+          setState(() => currentEvent = event);
+        },
+      );
     } catch (e) {
       print('Failed to make OTA update. Details: $e');
     }
@@ -34,13 +34,16 @@ class _MyAppState extends State<MyApp> {
 
   @override
   Widget build(BuildContext context) {
+    if (currentEvent == null) {
+      return Container();
+    }
     return MaterialApp(
       home: Scaffold(
         appBar: AppBar(
           title: const Text('Plugin example app'),
         ),
         body: Center(
-          child: Text('OTA Update success: $updateStatus\n'),
+          child: Text('OTA status: ${currentEvent.status} : ${currentEvent.value} \n'),
         ),
       ),
     );
