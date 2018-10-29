@@ -1,6 +1,6 @@
 name: ota_update
 description: A Flutter plugin providing ota updates for Android and iOS, with download progress (Android only)
-version: 0.1.0
+version: 0.1.1
 author: 4Q Core Team <core@4q.sk>
 homepage: https://github.com/4Q-s-r-o/ota_update
 
