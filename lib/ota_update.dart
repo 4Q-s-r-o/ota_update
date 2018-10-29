@@ -3,7 +3,8 @@ import 'dart:async';
 import 'package:flutter/services.dart';
 
 class OtaUpdate {
-  static const EventChannel _progressChannel = const EventChannel('sk.fourq.ota_update');
+  static const EventChannel _progressChannel =
+      const EventChannel('sk.fourq.ota_update');
   Stream<OtaEvent> _progressStream;
 
   Stream<OtaEvent> execute(String url) {
