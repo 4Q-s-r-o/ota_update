@@ -98,8 +98,10 @@ public class OtaUpdatePlugin implements EventChannel.StreamHandler, PluginRegist
             handleCall();
             return true;
         } else {
-            progressSink.error("" + OtaStatus.PERMISSION_NOT_GRANTED_ERROR.ordinal(), null, null);
-            progressSink = null;
+            if (progressSink != null) {
+                progressSink.error("" + OtaStatus.PERMISSION_NOT_GRANTED_ERROR.ordinal(), null, null);
+                progressSink = null;
+            }
             return false;
         }
     }
