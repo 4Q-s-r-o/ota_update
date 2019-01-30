@@ -36,7 +36,7 @@
             </intent-filter>
         </activity>
         <provider
-                android:name="android.support.v4.content.FileProvider"
+                android:name="sk.fourq.otaupdate.OtaUpdateFileProvider"
                 android:authorities="sk.fourq.ota_update.provider"
                 android:exported="false"
                 android:grantUriPermissions="true">

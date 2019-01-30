@@ -1,3 +1,6 @@
+## 0.1.3
+* extended Android FileProvider to prevent possible conflicts with other plugins that also use FileProvider.
+
 ## 0.1.2
 
 * fixing NullPointerException when onRequestPermissionsResult was triggered by different plugin than this one

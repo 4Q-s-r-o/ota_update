@@ -30,6 +30,19 @@ try {
     print('Failed to make OTA update. Details: $e');
   }
 ```
+### Android
+Add following provider referrence to AndroidManifest.xml
+```xml
+<provider
+    android:name="sk.fourq.otaupdate.OtaUpdateFileProvider"
+    android:authorities="sk.fourq.ota_update.provider"
+    android:exported="false"
+    android:grantUriPermissions="true">
+    <meta-data
+        android:name="android.support.FILE_PROVIDER_PATHS"
+        android:resource="@xml/filepaths" />
+</provider>
+```
 
 ## Statuses
 * DOWNLOADING: 
