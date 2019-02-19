@@ -4,7 +4,7 @@
 
 Flutter plugin implementing OTA update.\
 On Android it downloads the file (with progress reporting) and triggers app installation intent.\
-On iOS it opens safari with specified ipa url. (only briefly tested)
+On iOS it opens safari with specified ipa url. (not yet functioning)
 
 ## Usage
 
