@@ -1,6 +1,6 @@
 # ota_update
 
-[![pub package](https://img.shields.io/pub/v/signature.svg)](https://pub.dartlang.org/packages/ota_update)
+[![pub package](https://img.shields.io/pub/v/ota_update.svg)](https://pub.dartlang.org/packages/ota_update)
 
 Flutter plugin implementing OTA update.\
 On Android it downloads the file (with progress reporting) and triggers app installation intent.\
