@@ -1,4 +1,4 @@
-## 1.1.0
+## 1.0.1
 * migration of embeded example to AndroidX 
 * Upgraded Gradle to latest version
 
