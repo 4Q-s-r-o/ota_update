@@ -16,7 +16,7 @@
     NSString* webStringURL = [utlString stringByAddingPercentEscapesUsingEncoding:NSUTF8StringEncoding];
     NSURL* url = [NSURL URLWithString:webStringURL];
     [[UIApplication sharedApplication] openURL:url];
-    result(TRUE);
+    result(@YES);
   } else {
     result(FlutterMethodNotImplemented);
   }
