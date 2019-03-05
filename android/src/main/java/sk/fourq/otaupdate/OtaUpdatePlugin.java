@@ -22,6 +22,7 @@ import java.util.Map;
 import java.util.Arrays;
 
 import androidx.core.content.FileProvider;
+import androidx.core.content.ContextCompat;
 
 /**
  * OtaUpdatePlugin
@@ -64,7 +65,7 @@ public class OtaUpdatePlugin implements EventChannel.StreamHandler, PluginRegist
         if (
 //                PackageManager.PERMISSION_GRANTED == registrar.activity().checkSelfPermission(Manifest.permission.ACCESS_WIFI_STATE) &&
 //                PackageManager.PERMISSION_GRANTED == registrar.activity().checkSelfPermission(Manifest.permission.ACCESS_NETWORK_STATE) &&
-                PackageManager.PERMISSION_GRANTED == registrar.activity().checkSelfPermission(Manifest.permission.WRITE_EXTERNAL_STORAGE)) {
+                PackageManager.PERMISSION_GRANTED == ContextCompat.checkSelfPermission(registrar.context(), Manifest.permission.WRITE_EXTERNAL_STORAGE)) {
             handleCall();
         } else {
             String[] permissions = {
