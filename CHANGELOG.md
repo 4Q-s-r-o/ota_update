@@ -1,3 +1,6 @@
+## 1.0.3
+* fixed compatibility for older Android APIs (by zileyuan)
+
 ## 1.0.2
 * ios syntax error fix (by tchunwei)
 

@@ -23,6 +23,7 @@ import java.util.Arrays;
 
 import androidx.core.content.FileProvider;
 import androidx.core.content.ContextCompat;
+import androidx.core.app.ActivityCompat;
 
 /**
  * OtaUpdatePlugin
@@ -63,8 +64,8 @@ public class OtaUpdatePlugin implements EventChannel.StreamHandler, PluginRegist
         downloadUrl = ((Map)arguments).get("url").toString();
 
         if (
-//                PackageManager.PERMISSION_GRANTED == registrar.activity().checkSelfPermission(Manifest.permission.ACCESS_WIFI_STATE) &&
-//                PackageManager.PERMISSION_GRANTED == registrar.activity().checkSelfPermission(Manifest.permission.ACCESS_NETWORK_STATE) &&
+//                PackageManager.PERMISSION_GRANTED == ContextCompat.checkSelfPermission(registrar.context(), Manifest.permission.ACCESS_WIFI_STATE) &&
+//                PackageManager.PERMISSION_GRANTED == ContextCompat.checkSelfPermission(registrar.context(), Manifest.permission.ACCESS_NETWORK_STATE) &&
                 PackageManager.PERMISSION_GRANTED == ContextCompat.checkSelfPermission(registrar.context(), Manifest.permission.WRITE_EXTERNAL_STORAGE)) {
             handleCall();
         } else {
@@ -73,7 +74,7 @@ public class OtaUpdatePlugin implements EventChannel.StreamHandler, PluginRegist
 //                    Manifest.permission.ACCESS_NETWORK_STATE,
                     Manifest.permission.WRITE_EXTERNAL_STORAGE
             };
-            registrar.activity().requestPermissions(permissions, 0);
+            ActivityCompat.requestPermissions(registrar.activity(), permissions, 0);
         }
     }
 
