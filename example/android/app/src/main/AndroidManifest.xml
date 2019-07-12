@@ -37,7 +37,7 @@
         </activity>
         <provider
                 android:name="sk.fourq.otaupdate.OtaUpdateFileProvider"
-                android:authorities="sk.fourq.ota_update.provider"
+                android:authorities="sk.fourq.ota_update.provider1"
                 android:exported="false"
                 android:grantUriPermissions="true">
             <meta-data
