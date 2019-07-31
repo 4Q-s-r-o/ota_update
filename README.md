@@ -35,7 +35,7 @@ Add following provider referrence to AndroidManifest.xml
 ```xml
 <provider
     android:name="sk.fourq.otaupdate.OtaUpdateFileProvider"
-    android:authorities="sk.fourq.ota_update.provider"
+    android:authorities="${applicationId}.ota_update_provider"
     android:exported="false"
     android:grantUriPermissions="true">
     <meta-data

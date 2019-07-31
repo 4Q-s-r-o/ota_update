@@ -40,14 +40,15 @@ public class OtaUpdatePlugin implements EventChannel.StreamHandler, PluginRegist
     private final Registrar registrar;
     private EventChannel.EventSink progressSink;
     private String downloadUrl;
-    private String androidProviderAuthority = "sk.fourq.ota_update.provider";
+    private String androidProviderAuthority = "sk.fourq.ota_update.provider"; //FALLBACK provider authority
     private static final String TAG = "FLUTTER OTA";
     private Handler handler;
+    private Context context;
 
     private OtaUpdatePlugin(Registrar registrar) {
         this.registrar = registrar;
-        Context context = (registrar.activity() != null) ? registrar.activity() : registrar.context();
-        handler = new Handler(context.getMainLooper()){
+        context = (registrar.activity() != null) ? registrar.activity() : registrar.context();
+        handler = new Handler(context.getMainLooper()) {
             @Override
             public void handleMessage(Message msg) {
                 super.handleMessage(msg);
@@ -74,12 +75,14 @@ public class OtaUpdatePlugin implements EventChannel.StreamHandler, PluginRegist
             progressSink.error("" + OtaStatus.ALREADY_RUNNING_ERROR.ordinal(), "Method call was cancelled. One method call is already running", null);
         }
         progressSink = events;
-        downloadUrl = ((Map)arguments).get("url").toString();
+        downloadUrl = ((Map) arguments).get("url").toString();
 
         // user-provided provider authority
-        Object authority = ((Map)arguments).get("androidProviderAuthority");
+        Object authority = ((Map) arguments).get("androidProviderAuthority");
         if (authority != null) {
             androidProviderAuthority = authority.toString();
+        } else {
+            androidProviderAuthority = context.getPackageName() + "." + "ota_update_provider";
         }
 
         if (
@@ -125,7 +128,6 @@ public class OtaUpdatePlugin implements EventChannel.StreamHandler, PluginRegist
 
     private void handleCall() {
         try {
-            final Context context = (registrar.activity() != null) ? registrar.activity() : registrar.context();
             //PREPARE URLS
             final String destination = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS) + "/" + "ordo.apk";
             final Uri fileUri = Uri.parse("file://" + destination);

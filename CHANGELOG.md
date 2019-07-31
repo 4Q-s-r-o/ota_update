@@ -1,3 +1,8 @@
+## 2.0.0
+* fixed crash on flutter 1.7 (by kmtong)
+* added ability to override provider authority (by kmtong)
+* changed default authority to be dynamic to support multiple apps with ``ota_update`` out of the box. Please note that this is **breaking change**. To migrate plase update your provider authority in ``AndroidManifest`` to ``${applicationId}.ota_update_provider``  
+
 ## 1.0.3
 * fixed compatibility for older Android APIs (by zileyuan)
 
