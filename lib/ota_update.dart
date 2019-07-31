@@ -7,10 +7,10 @@ class OtaUpdate {
       const EventChannel('sk.fourq.ota_update');
   Stream<OtaEvent> _progressStream;
 
-  Stream<OtaEvent> execute(String url) {
+  Stream<OtaEvent> execute(String url, {String androidProviderAuthority}) {
     if (_progressStream == null) {
       _progressStream = _progressChannel.receiveBroadcastStream(
-        {"url": url},
+        {"url": url, "androidProviderAuthority": androidProviderAuthority},
       ).map(
         (dynamic event) => _toOtaEvent(event.cast<String>()),
       );
