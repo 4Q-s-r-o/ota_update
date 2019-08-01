@@ -1,3 +1,5 @@
+## 2.0.1
+* fixed crash in case of missing `progressSink`
 ## 2.0.0
 * fixed crash on flutter 1.7 (by kmtong)
 * added ability to override provider authority (by kmtong)

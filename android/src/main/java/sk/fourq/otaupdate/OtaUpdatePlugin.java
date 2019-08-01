@@ -170,15 +170,19 @@ public class OtaUpdatePlugin implements EventChannel.StreamHandler, PluginRegist
                         intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
                     }
                     //SEND INSTALLING EVENT
-                    progressSink.success(Arrays.asList("" + OtaStatus.INSTALLING.ordinal(), ""));
-                    progressSink.endOfStream();
-                    progressSink = null;
-                    context.startActivity(intent);
+                    if(progressSink != null){
+                        progressSink.success(Arrays.asList("" + OtaStatus.INSTALLING.ordinal(), ""));
+                        progressSink.endOfStream();
+                        progressSink = null;
+                        context.startActivity(intent);
+                    }
                 }
             }, new IntentFilter(DownloadManager.ACTION_DOWNLOAD_COMPLETE));
         } catch (Exception e) {
-            progressSink.error("" + OtaStatus.INTERNAL_ERROR.ordinal(), e.getMessage(), null);
-            progressSink = null;
+            if(progressSink != null){
+                progressSink.error("" + OtaStatus.INTERNAL_ERROR.ordinal(), e.getMessage(), null);
+                progressSink = null;
+            }
             Log.e(TAG, "ERROR: " + e.getMessage(), e);
         }
     }
