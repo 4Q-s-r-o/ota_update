@@ -16,8 +16,7 @@ To use this plugin, add `ota_update` as a [dependency in your `pubspec.yaml` fil
 // IMPORT PACKAGE
 import 'package:ota_update/ota_update.dart';
 
-// RUN OTA UPDATE 
-try {
+  // RUN OTA UPDATE 
   // START LISTENING FOR DOWNLOAD PROGRESS REPORTING EVENTS
   try {
     //LINK CONTAINS APK OF FLUTTER HELLO WORLD FROM FLUTTER SDK EXAMPLES
