@@ -31,7 +31,7 @@ try {
   }
 ```
 ### Android
-Add following provider referrence to AndroidManifest.xml
+Add following provider referrence to AndroidManifest.xml inside ```<application>``` node.
 ```xml
 <provider
     android:name="sk.fourq.otaupdate.OtaUpdateFileProvider"
@@ -43,6 +43,20 @@ Add following provider referrence to AndroidManifest.xml
         android:resource="@xml/filepaths" />
 </provider>
 ```
+See [AndroidManifest.xml](example/android/app/src/main/AndroidManifest.xml) in example
+
+Also, create the file ```android/src/main/res/xml/filepaths.xml``` with following contents. 
+This will allow plugin to access the downloads folder to start the update.
+
+```xml
+<?xml version="1.0" encoding="utf-8"?>
+<paths xmlns:android="http://schemas.android.com/apk/res/android">
+    <external-path name="external_download" path="Download"/>
+</paths>
+```
+
+See [filepaths.xml](example/android/app/src/main/res/xml/filepaths.xml) in example
+
 
 ## Statuses
 * DOWNLOADING: 
