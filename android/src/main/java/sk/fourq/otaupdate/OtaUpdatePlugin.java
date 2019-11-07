@@ -202,7 +202,7 @@ public class OtaUpdatePlugin implements EventChannel.StreamHandler, PluginRegist
                     //PUSH THE STATUS THROUGH THE SINK
                     int bytes_downloaded = c.getInt(c.getColumnIndex(DownloadManager.COLUMN_BYTES_DOWNLOADED_SO_FAR));
                     int bytes_total = c.getInt(c.getColumnIndex(DownloadManager.COLUMN_TOTAL_SIZE_BYTES));
-                    if (progressSink != null) {
+                    if (progressSink != null && bytes_total > 0) {
                         Message message = new Message();
                         message.arg1 = bytes_downloaded;
                         message.arg2 = bytes_total;
