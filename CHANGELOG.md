@@ -1,3 +1,5 @@
+## 2.0.2
+* Fixed division by zero error
 ## 2.0.1
 * fixed crash in case of missing `progressSink`
 ## 2.0.0
