@@ -168,7 +168,7 @@ public class OtaUpdatePlugin implements EventChannel.StreamHandler, PluginRegist
             final DownloadManager manager = (DownloadManager) context.getSystemService(Context.DOWNLOAD_SERVICE);
             final long downloadId = manager.enqueue(request);
 
-            Log.d(TAG, "OTA UPDATE DOWNLOAD STARED " + downloadId);
+            Log.d(TAG, "OTA UPDATE DOWNLOAD STARTED " + downloadId);
             //START TRACKING DOWNLOAD PROGRESS IN SEPARATE THREAD
             trackDownloadProgress(downloadId, manager);
 
