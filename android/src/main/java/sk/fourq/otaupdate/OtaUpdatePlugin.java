@@ -35,6 +35,9 @@ public class OtaUpdatePlugin implements EventChannel.StreamHandler, PluginRegist
 
     private static final String BYTES_DOWNLOADED = "BYTES_DOWNLOADED";
     private static final String BYTES_TOTAL = "BYTES_TOTAL";
+    public static final String ARG_URL = "url";
+    public static final String ARG_FILENAME = "filename";
+    public static final String ARG_ANDROID_PROVIDER_AUTHORITY = "androidProviderAuthority";
 
     enum OtaStatus {
         DOWNLOADING, INSTALLING, ALREADY_RUNNING_ERROR, PERMISSION_NOT_GRANTED_ERROR, INTERNAL_ERROR
@@ -43,6 +46,7 @@ public class OtaUpdatePlugin implements EventChannel.StreamHandler, PluginRegist
     private final Registrar registrar;
     private EventChannel.EventSink progressSink;
     private String downloadUrl;
+    private String filename;
     private String androidProviderAuthority = "sk.fourq.ota_update.provider"; //FALLBACK provider authority
     private static final String TAG = "FLUTTER OTA";
     private Handler handler;
@@ -82,10 +86,14 @@ public class OtaUpdatePlugin implements EventChannel.StreamHandler, PluginRegist
         }
         Log.d(TAG, "OTA UPDATE ON LISTEN");
         progressSink = events;
-        downloadUrl = ((Map) arguments).get("url").toString();
+        Map argumentsMap = ((Map) arguments);
+        downloadUrl = argumentsMap.get(ARG_URL).toString();
+        if (argumentsMap.containsKey(ARG_FILENAME)) {
+            filename = argumentsMap.get(ARG_FILENAME).toString();
+        }
 
         // user-provided provider authority
-        Object authority = ((Map) arguments).get("androidProviderAuthority");
+        Object authority = ((Map) arguments).get(ARG_ANDROID_PROVIDER_AUTHORITY);
         if (authority != null) {
             androidProviderAuthority = authority.toString();
         } else {
@@ -136,7 +144,10 @@ public class OtaUpdatePlugin implements EventChannel.StreamHandler, PluginRegist
     private void handleCall() {
         try {
             //PREPARE URLS
-            final String destination = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS) + "/" + "ordo.apk";
+            if (filename == null) {
+                filename = "ota_update.apk";
+            }
+            final String destination = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS) + "/" + filename;
             final Uri fileUri = Uri.parse("file://" + destination);
 
             //DELETE APK FILE IF SOME ALREADY EXISTS
@@ -150,7 +161,7 @@ public class OtaUpdatePlugin implements EventChannel.StreamHandler, PluginRegist
             Log.d(TAG, "OTA UPDATE ON STARTING DOWNLOAD");
             //CREATE DOWNLOAD MANAGER REQUEST
             DownloadManager.Request request = new DownloadManager.Request(Uri.parse(downloadUrl));
-            request.setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED);
+            request.setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE);
             request.setDestinationUri(fileUri);
 
             //GET DOWNLOAD SERVICE AND ENQUEUE OUR DOWNLOAD REQUEST
@@ -234,9 +245,9 @@ public class OtaUpdatePlugin implements EventChannel.StreamHandler, PluginRegist
                         Log.d(TAG, "OTA UPDATE TRACK DOWNLOAD RUNNING ");
                     } else if (status == DownloadManager.STATUS_FAILED) { //failed
                         downloading = false;
-                        Log.d(TAG, "OTA UPDATE FAILURE: "+c.getInt(c.getColumnIndex(DownloadManager.COLUMN_REASON)));
+                        Log.d(TAG, "OTA UPDATE FAILURE: " + c.getInt(c.getColumnIndex(DownloadManager.COLUMN_REASON)));
                     } else if (status == DownloadManager.STATUS_PAUSED) { //failed, but may be retryied on device restart
-                        Log.d(TAG, "OTA UPDATE PAUSED. REASON IS (CHECK AGAINST PAUSED_ CONSTANTS OF DownloadManager: "+c.getInt(c.getColumnIndex(DownloadManager.COLUMN_REASON)));
+                        Log.d(TAG, "OTA UPDATE PAUSED. REASON IS (CHECK AGAINST PAUSED_ CONSTANTS OF DownloadManager: " + c.getInt(c.getColumnIndex(DownloadManager.COLUMN_REASON)));
                     }
 
                     //CLOSE CURSOR

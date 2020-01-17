@@ -20,7 +20,8 @@ import 'package:ota_update/ota_update.dart';
   // START LISTENING FOR DOWNLOAD PROGRESS REPORTING EVENTS
   try {
     //LINK CONTAINS APK OF FLUTTER HELLO WORLD FROM FLUTTER SDK EXAMPLES
-    OtaUpdate().execute('https://internal1.4q.sk/flutter_hello_world.apk').listen(
+    //destinationFileName is optional
+    OtaUpdate().execute('https://internal1.4q.sk/flutter_hello_world.apk', destinationFilename: 'flutter_hello_world.apk').listen(
       (OtaEvent event) {
         print('EVENT: ${event.status} : ${event.value}');
       },

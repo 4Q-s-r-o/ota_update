@@ -1,3 +1,5 @@
+## 2.1.0
+* Added support for custom filename
 ## 2.0.3
 * Updated example to AndroidX
 * Updated link to APK used in example
