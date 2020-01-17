@@ -11,27 +11,30 @@ import android.content.pm.PackageManager;
 import android.database.Cursor;
 import android.net.Uri;
 import android.os.Build;
+import android.os.Bundle;
+import android.os.Environment;
 import android.os.Handler;
 import android.os.Message;
-import android.os.Environment;
 import android.util.Log;
+import androidx.core.app.ActivityCompat;
+import androidx.core.content.ContextCompat;
+import androidx.core.content.FileProvider;
 import io.flutter.plugin.common.EventChannel;
 import io.flutter.plugin.common.PluginRegistry;
 import io.flutter.plugin.common.PluginRegistry.Registrar;
 
 import java.io.File;
-import java.util.Map;
 import java.util.Arrays;
-
-import androidx.core.content.FileProvider;
-import androidx.core.content.ContextCompat;
-import androidx.core.app.ActivityCompat;
+import java.util.Map;
 
 /**
  * OtaUpdatePlugin
  */
 @TargetApi(Build.VERSION_CODES.M)
 public class OtaUpdatePlugin implements EventChannel.StreamHandler, PluginRegistry.RequestPermissionsResultListener {
+
+    private static final String BYTES_DOWNLOADED = "BYTES_DOWNLOADED";
+    private static final String BYTES_TOTAL = "BYTES_TOTAL";
 
     enum OtaStatus {
         DOWNLOADING, INSTALLING, ALREADY_RUNNING_ERROR, PERMISSION_NOT_GRANTED_ERROR, INTERNAL_ERROR
@@ -53,7 +56,10 @@ public class OtaUpdatePlugin implements EventChannel.StreamHandler, PluginRegist
             public void handleMessage(Message msg) {
                 super.handleMessage(msg);
                 if (progressSink != null) {
-                    progressSink.success(Arrays.asList("" + OtaStatus.DOWNLOADING.ordinal(), "" + ((msg.arg1 * 100) / msg.arg2)));
+                    Bundle data = msg.getData();
+                    long bytesDownloaded = data.getLong(BYTES_DOWNLOADED);
+                    long bytesTotal = data.getLong(BYTES_TOTAL);
+                    progressSink.success(Arrays.asList("" + OtaStatus.DOWNLOADING.ordinal(), "" + ((bytesDownloaded * 100) / bytesTotal)));
                 }
             }
         };
@@ -74,6 +80,7 @@ public class OtaUpdatePlugin implements EventChannel.StreamHandler, PluginRegist
         if (progressSink != null) {
             progressSink.error("" + OtaStatus.ALREADY_RUNNING_ERROR.ordinal(), "Method call was cancelled. One method call is already running", null);
         }
+        Log.d(TAG, "OTA UPDATE ON LISTEN");
         progressSink = events;
         downloadUrl = ((Map) arguments).get("url").toString();
 
@@ -140,14 +147,17 @@ public class OtaUpdatePlugin implements EventChannel.StreamHandler, PluginRegist
                 }
             }
 
+            Log.d(TAG, "OTA UPDATE ON STARTING DOWNLOAD");
             //CREATE DOWNLOAD MANAGER REQUEST
             DownloadManager.Request request = new DownloadManager.Request(Uri.parse(downloadUrl));
+            request.setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED);
             request.setDestinationUri(fileUri);
 
             //GET DOWNLOAD SERVICE AND ENQUEUE OUR DOWNLOAD REQUEST
             final DownloadManager manager = (DownloadManager) context.getSystemService(Context.DOWNLOAD_SERVICE);
             final long downloadId = manager.enqueue(request);
 
+            Log.d(TAG, "OTA UPDATE DOWNLOAD STARED " + downloadId);
             //START TRACKING DOWNLOAD PROGRESS IN SEPARATE THREAD
             trackDownloadProgress(downloadId, manager);
 
@@ -170,7 +180,7 @@ public class OtaUpdatePlugin implements EventChannel.StreamHandler, PluginRegist
                         intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
                     }
                     //SEND INSTALLING EVENT
-                    if(progressSink != null){
+                    if (progressSink != null) {
                         progressSink.success(Arrays.asList("" + OtaStatus.INSTALLING.ordinal(), ""));
                         progressSink.endOfStream();
                         progressSink = null;
@@ -179,7 +189,7 @@ public class OtaUpdatePlugin implements EventChannel.StreamHandler, PluginRegist
                 }
             }, new IntentFilter(DownloadManager.ACTION_DOWNLOAD_COMPLETE));
         } catch (Exception e) {
-            if(progressSink != null){
+            if (progressSink != null) {
                 progressSink.error("" + OtaStatus.INTERNAL_ERROR.ordinal(), e.getMessage(), null);
                 progressSink = null;
             }
@@ -188,9 +198,11 @@ public class OtaUpdatePlugin implements EventChannel.StreamHandler, PluginRegist
     }
 
     private void trackDownloadProgress(final long downloadId, final DownloadManager manager) {
+        Log.d(TAG, "OTA UPDATE TRACK DOWNLOAD STARTED " + downloadId);
         new Thread(new Runnable() {
             @Override
             public void run() {
+                Log.d(TAG, "OTA UPDATE TRACK DOWNLOAD THREAD STARTED " + downloadId);
                 //REPORT PROGRESS WHILE DOWNLOAD STILL RUNS
                 boolean downloading = true;
                 while (downloading) {
@@ -200,18 +212,33 @@ public class OtaUpdatePlugin implements EventChannel.StreamHandler, PluginRegist
                     Cursor c = manager.query(q);
                     c.moveToFirst();
                     //PUSH THE STATUS THROUGH THE SINK
-                    int bytes_downloaded = c.getInt(c.getColumnIndex(DownloadManager.COLUMN_BYTES_DOWNLOADED_SO_FAR));
-                    int bytes_total = c.getInt(c.getColumnIndex(DownloadManager.COLUMN_TOTAL_SIZE_BYTES));
+                    long bytes_downloaded = c.getLong(c.getColumnIndex(DownloadManager.COLUMN_BYTES_DOWNLOADED_SO_FAR));
+                    long bytes_total = c.getLong(c.getColumnIndex(DownloadManager.COLUMN_TOTAL_SIZE_BYTES));
                     if (progressSink != null && bytes_total > 0) {
                         Message message = new Message();
-                        message.arg1 = bytes_downloaded;
-                        message.arg2 = bytes_total;
+                        Bundle data = new Bundle();
+                        data.putLong(BYTES_DOWNLOADED, bytes_downloaded);
+                        data.putLong(BYTES_TOTAL, bytes_total);
+                        message.setData(data);
                         handler.sendMessage(message);
                     }
                     //STOP CYCLE IF DOWNLOAD IS COMPLETE
-                    if (c.getInt(c.getColumnIndex(DownloadManager.COLUMN_STATUS)) == DownloadManager.STATUS_SUCCESSFUL) {
+                    int status = c.getInt(c.getColumnIndex(DownloadManager.COLUMN_STATUS));
+
+                    if (status == DownloadManager.STATUS_SUCCESSFUL) { //sucess
+                        Log.d(TAG, "OTA UPDATE SUCCESS");
                         downloading = false;
+                    } else if (status == DownloadManager.STATUS_PENDING) { //running
+                        Log.d(TAG, "OTA UPDATE PENDING");
+                    } else if (status == DownloadManager.STATUS_RUNNING) { //running
+                        Log.d(TAG, "OTA UPDATE TRACK DOWNLOAD RUNNING ");
+                    } else if (status == DownloadManager.STATUS_FAILED) { //failed
+                        downloading = false;
+                        Log.d(TAG, "OTA UPDATE FAILURE: "+c.getInt(c.getColumnIndex(DownloadManager.COLUMN_REASON)));
+                    } else if (status == DownloadManager.STATUS_PAUSED) { //failed, but may be retryied on device restart
+                        Log.d(TAG, "OTA UPDATE PAUSED. REASON IS (CHECK AGAINST PAUSED_ CONSTANTS OF DownloadManager: "+c.getInt(c.getColumnIndex(DownloadManager.COLUMN_REASON)));
                     }
+
                     //CLOSE CURSOR
                     c.close();
                     //WAIT FOR 1/4 SECOND FOR ANOTHER ITERATION

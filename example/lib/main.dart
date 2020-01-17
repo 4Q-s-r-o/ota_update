@@ -23,7 +23,7 @@ class _MyAppState extends State<MyApp> {
     try {
       //LINK CONTAINS APK OF FLUTTER HELLO WORLD FROM FLUTTER SDK EXAMPLES
       OtaUpdate()
-          .execute('https://test1.4q.sk/flutter_hello_world.apk')
+          .execute('https://internal1.4q.sk/flutter_hello_world.apk')
           .listen(
         (OtaEvent event) {
           setState(() => currentEvent = event);

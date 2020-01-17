@@ -1,3 +1,8 @@
+## 2.0.3
+* Updated example to AndroidX
+* Updated link to APK used in example
+* Improved logging in Android implementation
+* Fixed negative progress values in case of big APK
 ## 2.0.2
 * Fixed division by zero error
 ## 2.0.1
