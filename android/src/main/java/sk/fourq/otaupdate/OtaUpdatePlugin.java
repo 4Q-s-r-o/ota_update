@@ -184,7 +184,8 @@ public class OtaUpdatePlugin implements EventChannel.StreamHandler, PluginRegist
                         Uri apkUri = FileProvider.getUriForFile(context, androidProviderAuthority, new File(destination));
                         intent = new Intent(Intent.ACTION_INSTALL_PACKAGE);
                         intent.setData(apkUri);
-                        intent.setFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                        intent.setFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
                     } else {
                         intent = new Intent(Intent.ACTION_VIEW);
                         intent.setDataAndType(fileUri, "application/vnd.android.package-archive");

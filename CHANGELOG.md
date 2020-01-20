@@ -1,3 +1,5 @@
+## 2.1.1
+* Added flag FLAG_ACTIVITY_NEW_TASK to intent ACTION_INSTALL_PACKAGE in Android implementation
 ## 2.1.0
 * Added support for custom filename
 ## 2.0.3

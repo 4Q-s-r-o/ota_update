@@ -57,6 +57,8 @@ This will allow plugin to access the downloads folder to start the update.
 
 See [filepaths.xml](example/android/app/src/main/res/xml/filepaths.xml) in example
 
+#### Note
+Google Play Protect may in some cases cause problems with installation. 
 
 ## Statuses
 * DOWNLOADING: 
