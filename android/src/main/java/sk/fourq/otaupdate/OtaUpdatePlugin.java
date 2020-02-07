@@ -35,12 +35,14 @@ public class OtaUpdatePlugin implements EventChannel.StreamHandler, PluginRegist
 
     private static final String BYTES_DOWNLOADED = "BYTES_DOWNLOADED";
     private static final String BYTES_TOTAL = "BYTES_TOTAL";
+    private static final String ERROR = "ERROR";
     public static final String ARG_URL = "url";
     public static final String ARG_FILENAME = "filename";
     public static final String ARG_ANDROID_PROVIDER_AUTHORITY = "androidProviderAuthority";
+    public static final long MAX_WAIT_FOR_DOWNLOAD_START = 5000; //5s
 
     enum OtaStatus {
-        DOWNLOADING, INSTALLING, ALREADY_RUNNING_ERROR, PERMISSION_NOT_GRANTED_ERROR, INTERNAL_ERROR
+        DOWNLOADING, INSTALLING, ALREADY_RUNNING_ERROR, PERMISSION_NOT_GRANTED_ERROR, INTERNAL_ERROR, DOWNLOAD_ERROR
     }
 
     private final Registrar registrar;
@@ -61,9 +63,13 @@ public class OtaUpdatePlugin implements EventChannel.StreamHandler, PluginRegist
                 super.handleMessage(msg);
                 if (progressSink != null) {
                     Bundle data = msg.getData();
-                    long bytesDownloaded = data.getLong(BYTES_DOWNLOADED);
-                    long bytesTotal = data.getLong(BYTES_TOTAL);
-                    progressSink.success(Arrays.asList("" + OtaStatus.DOWNLOADING.ordinal(), "" + ((bytesDownloaded * 100) / bytesTotal)));
+                    if (data.containsKey(ERROR)) {
+                        reportError(OtaStatus.DOWNLOAD_ERROR, data.getString(ERROR));
+                    } else {
+                        long bytesDownloaded = data.getLong(BYTES_DOWNLOADED);
+                        long bytesTotal = data.getLong(BYTES_TOTAL);
+                        progressSink.success(Arrays.asList("" + OtaStatus.DOWNLOADING.ordinal(), "" + ((bytesDownloaded * 100) / bytesTotal)));
+                    }
                 }
             }
         };
@@ -217,50 +223,79 @@ public class OtaUpdatePlugin implements EventChannel.StreamHandler, PluginRegist
                 Log.d(TAG, "OTA UPDATE TRACK DOWNLOAD THREAD STARTED " + downloadId);
                 //REPORT PROGRESS WHILE DOWNLOAD STILL RUNS
                 boolean downloading = true;
+                boolean hasStatus = false;
+                long downloadStart = System.currentTimeMillis();
                 while (downloading) {
                     //QUERY CURRENT PROGRESS STATUS
                     DownloadManager.Query q = new DownloadManager.Query();
                     q.setFilterById(downloadId);
                     Cursor c = manager.query(q);
-                    c.moveToFirst();
-                    //PUSH THE STATUS THROUGH THE SINK
-                    long bytes_downloaded = c.getLong(c.getColumnIndex(DownloadManager.COLUMN_BYTES_DOWNLOADED_SO_FAR));
-                    long bytes_total = c.getLong(c.getColumnIndex(DownloadManager.COLUMN_TOTAL_SIZE_BYTES));
-                    if (progressSink != null && bytes_total > 0) {
-                        Message message = new Message();
-                        Bundle data = new Bundle();
-                        data.putLong(BYTES_DOWNLOADED, bytes_downloaded);
-                        data.putLong(BYTES_TOTAL, bytes_total);
-                        message.setData(data);
-                        handler.sendMessage(message);
-                    }
-                    //STOP CYCLE IF DOWNLOAD IS COMPLETE
-                    int status = c.getInt(c.getColumnIndex(DownloadManager.COLUMN_STATUS));
+                    if (c.moveToFirst()) {
+                        hasStatus = true;
+                        //PUSH THE STATUS THROUGH THE SINK
+                        long bytes_downloaded = c.getLong(c.getColumnIndex(DownloadManager.COLUMN_BYTES_DOWNLOADED_SO_FAR));
+                        long bytes_total = c.getLong(c.getColumnIndex(DownloadManager.COLUMN_TOTAL_SIZE_BYTES));
+                        if (progressSink != null && bytes_total > 0) {
+                            Message message = new Message();
+                            Bundle data = new Bundle();
+                            data.putLong(BYTES_DOWNLOADED, bytes_downloaded);
+                            data.putLong(BYTES_TOTAL, bytes_total);
+                            message.setData(data);
+                            handler.sendMessage(message);
+                        }
+                        //STOP CYCLE IF DOWNLOAD IS COMPLETE
+                        int status = c.getInt(c.getColumnIndex(DownloadManager.COLUMN_STATUS));
 
-                    if (status == DownloadManager.STATUS_SUCCESSFUL) { //sucess
-                        Log.d(TAG, "OTA UPDATE SUCCESS");
-                        downloading = false;
-                    } else if (status == DownloadManager.STATUS_PENDING) { //running
-                        Log.d(TAG, "OTA UPDATE PENDING");
-                    } else if (status == DownloadManager.STATUS_RUNNING) { //running
-                        Log.d(TAG, "OTA UPDATE TRACK DOWNLOAD RUNNING ");
-                    } else if (status == DownloadManager.STATUS_FAILED) { //failed
-                        downloading = false;
-                        Log.d(TAG, "OTA UPDATE FAILURE: " + c.getInt(c.getColumnIndex(DownloadManager.COLUMN_REASON)));
-                    } else if (status == DownloadManager.STATUS_PAUSED) { //failed, but may be retryied on device restart
-                        Log.d(TAG, "OTA UPDATE PAUSED. REASON IS (CHECK AGAINST PAUSED_ CONSTANTS OF DownloadManager: " + c.getInt(c.getColumnIndex(DownloadManager.COLUMN_REASON)));
-                    }
+                        if (status == DownloadManager.STATUS_SUCCESSFUL) { //sucess
+                            Log.d(TAG, "OTA UPDATE SUCCESS");
+                            downloading = false;
+                        } else if (status == DownloadManager.STATUS_PENDING) { //running
+                            Log.d(TAG, "OTA UPDATE PENDING");
+                        } else if (status == DownloadManager.STATUS_RUNNING) { //running
+                            Log.d(TAG, "OTA UPDATE TRACK DOWNLOAD RUNNING ");
+                        } else if (status == DownloadManager.STATUS_FAILED) { //failed
+                            downloading = false;
+                            Log.d(TAG, "OTA UPDATE FAILURE: " + c.getInt(c.getColumnIndex(DownloadManager.COLUMN_REASON)));
+                            Message message = new Message();
+                            Bundle data = new Bundle();
+                            data.putString(ERROR, "RECEIVED STATUS FAILED");
+                            message.setData(data);
+                            handler.sendMessage(message);
+                        } else if (status == DownloadManager.STATUS_PAUSED) { //failed, but may be retryied on device restart
+                            Log.d(TAG, "OTA UPDATE PAUSED. REASON IS (CHECK AGAINST PAUSED_ CONSTANTS OF DownloadManager: " + c.getInt(c.getColumnIndex(DownloadManager.COLUMN_REASON)));
+                        }
 
-                    //CLOSE CURSOR
-                    c.close();
-                    //WAIT FOR 1/4 SECOND FOR ANOTHER ITERATION
-                    try {
-                        Thread.sleep(250);
-                    } catch (InterruptedException e) {
-                        e.printStackTrace();
+                        //CLOSE CURSOR
+                        c.close();
+                        //WAIT FOR 1/4 SECOND FOR ANOTHER ITERATION
+                        try {
+                            Thread.sleep(250);
+                        } catch (InterruptedException e) {
+                            e.printStackTrace();
+                        }
+                    } else {
+                        long duration = System.currentTimeMillis() - downloadStart;
+                        if (!hasStatus && duration > MAX_WAIT_FOR_DOWNLOAD_START) {
+                            //NOTE: If no status could be obtained from download manager for 5s after starting
+                            // the download something is bad and we will throw error.
+                            downloading = false;
+                            Log.d(TAG, "OTA UPDATE FAILURE: DOWNLOAD DID NOT START AFTER 5000ms");
+                            Message message = new Message();
+                            Bundle data = new Bundle();
+                            data.putString(ERROR, "DOWNLOAD DID NOT START AFTER 5000ms");
+                            message.setData(data);
+                            handler.sendMessage(message);
+                        }
                     }
                 }
             }
         }).start();
+    }
+
+    private void reportError(OtaStatus internalError, String s) {
+        if (progressSink != null) {
+            progressSink.error("" + internalError.ordinal(), s, null);
+            progressSink = null;
+        }
     }
 }

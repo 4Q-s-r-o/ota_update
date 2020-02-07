@@ -1,3 +1,5 @@
+## 2.2.0
+* Reporting of download errors
 ## 2.1.1
 * Added flag FLAG_ACTIVITY_NEW_TASK to intent ACTION_INSTALL_PACKAGE in Android implementation
 ## 2.1.0

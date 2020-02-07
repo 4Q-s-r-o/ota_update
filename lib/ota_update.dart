@@ -8,7 +8,7 @@ class OtaUpdate {
 
   Stream<OtaEvent> execute(String url,
       {String androidProviderAuthority, String destinationFilename}) {
-    if(destinationFilename != null && destinationFilename.contains("/")){
+    if (destinationFilename != null && destinationFilename.contains("/")) {
       throw OtaUpdateException('Invalid filename $destinationFilename');
     }
     if (_progressStream == null) {
@@ -42,11 +42,13 @@ enum OtaStatus {
   INSTALLING,
   ALREADY_RUNNING_ERROR,
   PERMISSION_NOT_GRANTED_ERROR,
-  INTERNAL_ERROR
+  INTERNAL_ERROR,
+  DOWNLOAD_ERROR
 }
 
 class OtaUpdateException implements Exception {
   final message;
+
   OtaUpdateException(this.message);
 
   String toString() {
