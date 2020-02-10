@@ -199,10 +199,13 @@ public class OtaUpdatePlugin implements EventChannel.StreamHandler, PluginRegist
                     }
                     //SEND INSTALLING EVENT
                     if (progressSink != null) {
+                        //NOTE: We have to start intent before sending event to stream
+                        //if application tries to programatically terminate app it may produce race condition
+                        //and application may end before intent is dispatched
+                        context.startActivity(intent);
                         progressSink.success(Arrays.asList("" + OtaStatus.INSTALLING.ordinal(), ""));
                         progressSink.endOfStream();
                         progressSink = null;
-                        context.startActivity(intent);
                     }
                 }
             }, new IntentFilter(DownloadManager.ACTION_DOWNLOAD_COMPLETE));
