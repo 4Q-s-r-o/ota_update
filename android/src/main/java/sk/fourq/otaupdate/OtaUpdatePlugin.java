@@ -120,6 +120,7 @@ public class OtaUpdatePlugin implements EventChannel.StreamHandler, PluginRegist
                                     e.printStackTrace();
                                 }
                                 if (activity.hasWindowFocus()) {
+                                    Log.d(TAG, "RESTARTING INTENT");
                                     //IF WE STILL HAVE FOCUS AFTER 1500ms INSTALLER DID NOT START WE TRY AGAIN
                                     context.startActivity(new Intent(intent));
                                 }
