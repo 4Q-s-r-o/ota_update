@@ -112,7 +112,7 @@ public class OtaUpdatePlugin implements EventChannel.StreamHandler, PluginRegist
                             Log.d(TAG, "ENDED STREAM");
                             progressSink = null;
 
-                            Activity activity = registrar.activity();
+                            Activity activity = this.registrar.activity();
                             if (activity != null && Build.VERSION.SDK_INT > Build.VERSION_CODES.P) {
                                 try {
                                     Thread.sleep(1500);
