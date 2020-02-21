@@ -2,6 +2,7 @@ package sk.fourq.otaupdate;
 
 import android.Manifest;
 import android.annotation.TargetApi;
+import android.app.Activity;
 import android.app.DownloadManager;
 import android.content.BroadcastReceiver;
 import android.content.Context;
@@ -69,7 +70,7 @@ public class OtaUpdatePlugin implements EventChannel.StreamHandler, PluginRegist
                     } else if (data.containsKey(SUCCESS)) {
                         Log.d(TAG, "OTA RECEIVED HANDLER MESSAGE");
                         String destination = data.getString(SUCCESS);
-                        if(destination == null){
+                        if (destination == null) {
                             reportError(OtaStatus.INTERNAL_ERROR, "Destination is null");
                             return;
                         }
@@ -110,6 +111,20 @@ public class OtaUpdatePlugin implements EventChannel.StreamHandler, PluginRegist
                             progressSink.endOfStream();
                             Log.d(TAG, "ENDED STREAM");
                             progressSink = null;
+
+                            Activity activity = registrar.activity();
+                            if (activity != null && Build.VERSION.SDK_INT > Build.VERSION_CODES.P) {
+                                try {
+                                    Thread.sleep(1500);
+                                } catch (InterruptedException e) {
+                                    e.printStackTrace();
+                                }
+                                if (activity.hasWindowFocus()) {
+                                    //IF WE STILL HAVE FOCUS AFTER 1500ms INSTALLER DID NOT START WE TRY AGAIN
+                                    context.startActivity(new Intent(intent));
+                                }
+                            }
+
                         }
                     } else {
                         long bytesDownloaded = data.getLong(BYTES_DOWNLOADED);
