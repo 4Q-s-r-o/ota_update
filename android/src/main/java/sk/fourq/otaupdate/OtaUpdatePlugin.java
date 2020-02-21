@@ -90,12 +90,16 @@ public class OtaUpdatePlugin implements EventChannel.StreamHandler, PluginRegist
                             intent.setData(apkUri);
                             intent.setFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
                                     .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                            intent.putExtra(Intent.EXTRA_NOT_UNKNOWN_SOURCE, true);
+                            intent.putExtra(Intent.EXTRA_INSTALLER_PACKAGE_NAME,
+                                    context.getApplicationInfo().packageName);
                         } else {
                             final Uri fileUri = Uri.parse("file://" + destination);
                             intent = new Intent(Intent.ACTION_VIEW);
                             intent.setDataAndType(fileUri, "application/vnd.android.package-archive");
                             intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
                         }
+
                         //SEND INSTALLING EVENT
                         if (progressSink != null) {
                             //NOTE: We have to start intent before sending event to stream
@@ -113,7 +117,7 @@ public class OtaUpdatePlugin implements EventChannel.StreamHandler, PluginRegist
                             progressSink = null;
 
                             Activity activity = OtaUpdatePlugin.this.registrar.activity();
-                            if (activity != null && Build.VERSION.SDK_INT > Build.VERSION_CODES.P) {
+                            if (activity != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
                                 try {
                                     Thread.sleep(1500);
                                 } catch (InterruptedException e) {
