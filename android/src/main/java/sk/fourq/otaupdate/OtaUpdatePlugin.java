@@ -36,6 +36,7 @@ public class OtaUpdatePlugin implements EventChannel.StreamHandler, PluginRegist
     private static final String BYTES_DOWNLOADED = "BYTES_DOWNLOADED";
     private static final String BYTES_TOTAL = "BYTES_TOTAL";
     private static final String ERROR = "ERROR";
+    private static final String SUCCESS = "SUCCESS";
     public static final String ARG_URL = "url";
     public static final String ARG_FILENAME = "filename";
     public static final String ARG_ANDROID_PROVIDER_AUTHORITY = "androidProviderAuthority";
@@ -65,6 +66,51 @@ public class OtaUpdatePlugin implements EventChannel.StreamHandler, PluginRegist
                     Bundle data = msg.getData();
                     if (data.containsKey(ERROR)) {
                         reportError(OtaStatus.DOWNLOAD_ERROR, data.getString(ERROR));
+                    } else if (data.containsKey(SUCCESS)) {
+                        Log.d(TAG, "OTA RECEIVED HANDLER MESSAGE");
+                        String destination = data.getString(SUCCESS);
+                        if(destination == null){
+                            reportError(OtaStatus.INTERNAL_ERROR, "Destination is null");
+                            return;
+                        }
+
+                        //DELETE APK FILE IF SOME ALREADY EXISTS
+                        File file = new File(destination);
+                        if (!file.exists()) {
+                            reportError(OtaStatus.INTERNAL_ERROR, "Downloaded file not found");
+                            return;
+                        }
+                        //TRIGGER APK INSTALLATION
+                        Intent intent;
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+                            //AUTHORITY NEEDS TO BE THE SAME ALSO IN MANIFEST
+                            Uri apkUri = FileProvider.getUriForFile(context, androidProviderAuthority, file);
+                            intent = new Intent(Intent.ACTION_INSTALL_PACKAGE);
+                            intent.setData(apkUri);
+                            intent.setFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                        } else {
+                            final Uri fileUri = Uri.parse("file://" + destination);
+                            intent = new Intent(Intent.ACTION_VIEW);
+                            intent.setDataAndType(fileUri, "application/vnd.android.package-archive");
+                            intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                        }
+                        //SEND INSTALLING EVENT
+                        if (progressSink != null) {
+                            //NOTE: We have to start intent before sending event to stream
+                            //if application tries to programatically terminate app it may produce race condition
+                            //and application may end before intent is dispatched
+                            Log.d(TAG, "STARTING INTENT TO INSTALL");
+                            context.startActivity(intent);
+                            Log.d(TAG, "STARTED INTENT TO INSTALL");
+                            Log.d(TAG, "SENDING EVENT TO SINK");
+                            progressSink.success(Arrays.asList("" + OtaStatus.INSTALLING.ordinal(), ""));
+                            Log.d(TAG, "SENT EVENT TO SINK");
+                            Log.d(TAG, "ENDING STREAM");
+                            progressSink.endOfStream();
+                            Log.d(TAG, "ENDED STREAM");
+                            progressSink = null;
+                        }
                     } else {
                         long bytesDownloaded = data.getLong(BYTES_DOWNLOADED);
                         long bytesTotal = data.getLong(BYTES_TOTAL);
@@ -181,38 +227,13 @@ public class OtaUpdatePlugin implements EventChannel.StreamHandler, PluginRegist
             //REGISTER LISTENER TO KNOW WHEN DOWNLOAD IS COMPLETE
             context.registerReceiver(new BroadcastReceiver() {
                 public void onReceive(Context c, Intent i) {
-                    //DOWNLOAD IS COMPLETE, UNREGISTER RECEIVER AND CLOSE PROGRESS SINK
+                    //DOWNLOAD IS COMPLETE, SEND MESSAGE TO UI THREAD AND UNREGISTER RECEIVER
                     context.unregisterReceiver(this);
-                    //TRIGGER APK INSTALLATION
-                    Intent intent;
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-                        //AUTHORITY NEEDS TO BE THE SAME ALSO IN MANIFEST
-                        Uri apkUri = FileProvider.getUriForFile(context, androidProviderAuthority, new File(destination));
-                        intent = new Intent(Intent.ACTION_INSTALL_PACKAGE);
-                        intent.setData(apkUri);
-                        intent.setFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-                    } else {
-                        intent = new Intent(Intent.ACTION_VIEW);
-                        intent.setDataAndType(fileUri, "application/vnd.android.package-archive");
-                        intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-                    }
-                    //SEND INSTALLING EVENT
-                    if (progressSink != null) {
-                        //NOTE: We have to start intent before sending event to stream
-                        //if application tries to programatically terminate app it may produce race condition
-                        //and application may end before intent is dispatched
-                        Log.d(TAG, "STARTING INTENT TO INSTALL");
-                        c.startActivity(intent);
-                        Log.d(TAG, "STARTED INTENT TO INSTALL");
-                        Log.d(TAG, "SENDING EVENT TO SINK");
-                        progressSink.success(Arrays.asList("" + OtaStatus.INSTALLING.ordinal(), ""));
-                        Log.d(TAG, "SENT EVENT TO SINK");
-                        Log.d(TAG, "ENDING STREAM");
-                        progressSink.endOfStream();
-                        Log.d(TAG, "ENDED STREAM");
-                        progressSink = null;
-                    }
+                    Message message = new Message();
+                    Bundle bundle = new Bundle();
+                    bundle.putString(SUCCESS, destination);
+                    message.setData(bundle);
+                    handler.sendMessage(message);
                 }
             }, new IntentFilter(DownloadManager.ACTION_DOWNLOAD_COMPLETE));
         } catch (Exception e) {
