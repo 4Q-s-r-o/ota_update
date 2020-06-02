@@ -1,3 +1,5 @@
+## 2.2.2
+* Add support of sending headers
 ## 2.2.1
 * Intent to install downloaded APK is now dispatched before dispatching ```INSTALLING``` event to flutter. This change should solve race condition if application programatically exits on ```INSTALLING``` event (APP could exit before intent was dispatched and installation would not start in that case). 
 ## 2.2.0
