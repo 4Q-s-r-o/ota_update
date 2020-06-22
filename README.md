@@ -82,5 +82,9 @@ Google Play Protect may in some cases cause problems with installation.
 
 ## Contribution and Support
 * Contributions are welcome!
-* If you want to contribute code please create a PR
 * If you find a bug or want a feature, please fill an issue
+* If you want to contribute code please create a PR
+
+### PR guidelines
+
+* Please do not change version in pubspec.yaml nor update CHANGELOG.md - this will be done before release of new version as release may contain multiple fixes and/or features. This will prevent some potential (yet simple) merge  conflicts.
