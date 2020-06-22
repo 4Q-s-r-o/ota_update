@@ -16,6 +16,9 @@ import android.os.Environment;
 import android.os.Handler;
 import android.os.Message;
 import android.util.Log;
+
+import org.json.JSONException;
+import org.json.JSONObject;
 import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
 import androidx.core.content.FileProvider;
@@ -25,6 +28,7 @@ import io.flutter.plugin.common.PluginRegistry.Registrar;
 
 import java.io.File;
 import java.util.Arrays;
+import java.util.Iterator;
 import java.util.Map;
 
 /**
@@ -37,6 +41,7 @@ public class OtaUpdatePlugin implements EventChannel.StreamHandler, PluginRegist
     private static final String BYTES_TOTAL = "BYTES_TOTAL";
     private static final String ERROR = "ERROR";
     public static final String ARG_URL = "url";
+    public static final String ARG_HEADERS = "headers";
     public static final String ARG_FILENAME = "filename";
     public static final String ARG_ANDROID_PROVIDER_AUTHORITY = "androidProviderAuthority";
     public static final long MAX_WAIT_FOR_DOWNLOAD_START = 5000; //5s
@@ -48,6 +53,7 @@ public class OtaUpdatePlugin implements EventChannel.StreamHandler, PluginRegist
     private final Registrar registrar;
     private EventChannel.EventSink progressSink;
     private String downloadUrl;
+    private JSONObject headers;
     private String filename;
     private String androidProviderAuthority = "sk.fourq.ota_update.provider"; //FALLBACK provider authority
     private static final String TAG = "FLUTTER OTA";
@@ -94,6 +100,15 @@ public class OtaUpdatePlugin implements EventChannel.StreamHandler, PluginRegist
         progressSink = events;
         Map argumentsMap = ((Map) arguments);
         downloadUrl = argumentsMap.get(ARG_URL).toString();
+        try {
+            String headersJson = argumentsMap.get(ARG_HEADERS).toString();
+            if(!headersJson.isEmpty()) {
+                headers = new JSONObject(headersJson);
+            }
+        }
+        catch (JSONException e) {
+            Log.e(TAG, "ERROR: " + e.getMessage(), e);
+        }
         if (argumentsMap.containsKey(ARG_FILENAME)) {
             filename = argumentsMap.get(ARG_FILENAME).toString();
         }
@@ -167,6 +182,15 @@ public class OtaUpdatePlugin implements EventChannel.StreamHandler, PluginRegist
             Log.d(TAG, "OTA UPDATE ON STARTING DOWNLOAD");
             //CREATE DOWNLOAD MANAGER REQUEST
             DownloadManager.Request request = new DownloadManager.Request(Uri.parse(downloadUrl));
+            if(headers != null) {
+                Iterator<String> jsonKeys = headers.keys();
+                while (jsonKeys.hasNext()) {
+                    String headerName = jsonKeys.next();
+                    String headerValue = headers.getString(headerName);
+                    request.addRequestHeader(headerName, headerValue);
+                }
+            }
+
             request.setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE);
             request.setDestinationUri(fileUri);
 

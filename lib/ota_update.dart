@@ -1,13 +1,17 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:flutter/services.dart';
 
 class OtaUpdate {
-  static const EventChannel _progressChannel = const EventChannel('sk.fourq.ota_update');
+  static const EventChannel _progressChannel =
+      const EventChannel('sk.fourq.ota_update');
   Stream<OtaEvent> _progressStream;
 
   Stream<OtaEvent> execute(String url,
-      {String androidProviderAuthority, String destinationFilename}) {
+      {Map<String, String> headers = const {},
+      String androidProviderAuthority,
+      String destinationFilename}) {
     if (destinationFilename != null && destinationFilename.contains("/")) {
       throw OtaUpdateException('Invalid filename $destinationFilename');
     }
@@ -17,6 +21,7 @@ class OtaUpdate {
           "url": url,
           "androidProviderAuthority": androidProviderAuthority,
           "filename": destinationFilename,
+          "headers": jsonEncode(headers)
         },
       ).map(
         (dynamic event) => _toOtaEvent(event.cast<String>()),
