@@ -19,15 +19,21 @@ import 'package:ota_update/ota_update.dart';
   // RUN OTA UPDATE 
   // START LISTENING FOR DOWNLOAD PROGRESS REPORTING EVENTS
   try {
-    //LINK CONTAINS APK OF FLUTTER HELLO WORLD FROM FLUTTER SDK EXAMPLES
-    //destinationFileName is optional
-    OtaUpdate().execute('https://internal1.4q.sk/flutter_hello_world.apk', destinationFilename: 'flutter_hello_world.apk').listen(
-      (OtaEvent event) {
-        print('EVENT: ${event.status} : ${event.value}');
-      },
-    );
+      //LINK CONTAINS APK OF FLUTTER HELLO WORLD FROM FLUTTER SDK EXAMPLES
+      OtaUpdate()
+          .execute(
+        'https://internal1.4q.sk/flutter_hello_world.apk',
+        // OPTIONAL
+        destinationFilename: 'flutter_hello_world.apk',
+        //OPTIONAL, ANDROID ONLY - ABILITY TO VALIDATE CHECKSUM OF FILE:
+        sha256checksum: "d6da28451a1e15cf7a75f2c3f151befad3b80ad0bb232ab15c20897e54f21478",
+      ).listen(
+        (OtaEvent event) {
+          setState(() => currentEvent = event);
+        },
+      );
   } catch (e) {
-    print('Failed to make OTA update. Details: $e');
+      print('Failed to make OTA update. Details: $e');
   }
 ```
 ### Android
@@ -73,6 +79,11 @@ Google Play Protect may in some cases cause problems with installation.
 * PERMISSION_NOT_GRANTED_ERROR: 
     * sent when user refused to grant required permissions
     * event value is null.
+* DOWNLOAD_ERROR
+    * sent when download crashed.
+* CHECKSUM_ERROR (android only)
+    * sent if calculated SHA-256 checksum does not match provided (optional) value 
+    * sent if checksum value should be verified, but checksum calculation failed  
 * INTERNAL_ERROR: 
     * sent in all other error cases
     * event value is underlying error message

@@ -43,11 +43,18 @@ public class OtaUpdatePlugin implements EventChannel.StreamHandler, PluginRegist
     public static final String ARG_URL = "url";
     public static final String ARG_HEADERS = "headers";
     public static final String ARG_FILENAME = "filename";
+    public static final String ARG_CHECKSUM = "checksum";
     public static final String ARG_ANDROID_PROVIDER_AUTHORITY = "androidProviderAuthority";
     public static final long MAX_WAIT_FOR_DOWNLOAD_START = 5000; //5s
 
     enum OtaStatus {
-        DOWNLOADING, INSTALLING, ALREADY_RUNNING_ERROR, PERMISSION_NOT_GRANTED_ERROR, INTERNAL_ERROR, DOWNLOAD_ERROR
+        DOWNLOADING,
+        INSTALLING,
+        ALREADY_RUNNING_ERROR,
+        PERMISSION_NOT_GRANTED_ERROR,
+        INTERNAL_ERROR,
+        DOWNLOAD_ERROR,
+        CHECKSUM_ERROR,
     }
 
     private final Registrar registrar;
@@ -55,6 +62,7 @@ public class OtaUpdatePlugin implements EventChannel.StreamHandler, PluginRegist
     private String downloadUrl;
     private JSONObject headers;
     private String filename;
+    private String checksum;
     private String androidProviderAuthority = "sk.fourq.ota_update.provider"; //FALLBACK provider authority
     private static final String TAG = "FLUTTER OTA";
     private Handler handler;
@@ -102,15 +110,17 @@ public class OtaUpdatePlugin implements EventChannel.StreamHandler, PluginRegist
         downloadUrl = argumentsMap.get(ARG_URL).toString();
         try {
             String headersJson = argumentsMap.get(ARG_HEADERS).toString();
-            if(!headersJson.isEmpty()) {
+            if (!headersJson.isEmpty()) {
                 headers = new JSONObject(headersJson);
             }
-        }
-        catch (JSONException e) {
+        } catch (JSONException e) {
             Log.e(TAG, "ERROR: " + e.getMessage(), e);
         }
         if (argumentsMap.containsKey(ARG_FILENAME)) {
             filename = argumentsMap.get(ARG_FILENAME).toString();
+        }
+        if (argumentsMap.containsKey(ARG_CHECKSUM)) {
+            checksum = argumentsMap.get(ARG_CHECKSUM).toString();
         }
 
         // user-provided provider authority
@@ -182,7 +192,7 @@ public class OtaUpdatePlugin implements EventChannel.StreamHandler, PluginRegist
             Log.d(TAG, "OTA UPDATE ON STARTING DOWNLOAD");
             //CREATE DOWNLOAD MANAGER REQUEST
             DownloadManager.Request request = new DownloadManager.Request(Uri.parse(downloadUrl));
-            if(headers != null) {
+            if (headers != null) {
                 Iterator<String> jsonKeys = headers.keys();
                 while (jsonKeys.hasNext()) {
                     String headerName = jsonKeys.next();
@@ -207,11 +217,34 @@ public class OtaUpdatePlugin implements EventChannel.StreamHandler, PluginRegist
                 public void onReceive(Context c, Intent i) {
                     //DOWNLOAD IS COMPLETE, UNREGISTER RECEIVER AND CLOSE PROGRESS SINK
                     context.unregisterReceiver(this);
+                    File downloadedFile = new File(destination);
+                    if (checksum != null) {
+                        //IF user provided checksum verify file integrity
+                        try {
+                            if (!Sha256ChecksumValidator.validateChecksum(checksum, downloadedFile)) {
+                                //SEND CHECKSUM ERROR EVENT
+                                if (progressSink != null) {
+                                    progressSink.error("" + OtaStatus.CHECKSUM_ERROR.ordinal(), "Checksum verification failed", null);
+                                    progressSink.endOfStream();
+                                    progressSink = null;
+                                    return;
+                                }
+                            }
+                        } catch (RuntimeException ex) {
+                            //SEND CHECKSUM ERROR EVENT
+                            if (progressSink != null) {
+                                progressSink.error("" + OtaStatus.CHECKSUM_ERROR.ordinal(), ex.getMessage(), null);
+                                progressSink.endOfStream();
+                                progressSink = null;
+                                return;
+                            }
+                        }
+                    }
                     //TRIGGER APK INSTALLATION
                     Intent intent;
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
                         //AUTHORITY NEEDS TO BE THE SAME ALSO IN MANIFEST
-                        Uri apkUri = FileProvider.getUriForFile(context, androidProviderAuthority, new File(destination));
+                        Uri apkUri = FileProvider.getUriForFile(context, androidProviderAuthority, downloadedFile);
                         intent = new Intent(Intent.ACTION_INSTALL_PACKAGE);
                         intent.setData(apkUri);
                         intent.setFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)

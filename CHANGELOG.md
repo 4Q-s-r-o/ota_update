@@ -1,3 +1,7 @@
+## 2.4.0
+* Fixed a problem with not receiving error events from stream
+* Added ability to validate SHA-256 checksum of downloaded file (android only)
+* Added more documentation comments
 ## 2.3.0
 * Added support of sending headers (by vasilich6107)
 ## 2.2.1
