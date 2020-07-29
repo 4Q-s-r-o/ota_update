@@ -1,3 +1,5 @@
+## 2.4.1
+* Fixed null pointer when passing null as checksum or filename (chronm)
 ## 2.4.0
 * Fixed a problem with not receiving error events from stream
 * Added ability to validate SHA-256 checksum of downloaded file (android only)
