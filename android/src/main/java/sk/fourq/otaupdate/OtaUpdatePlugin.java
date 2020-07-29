@@ -116,10 +116,10 @@ public class OtaUpdatePlugin implements EventChannel.StreamHandler, PluginRegist
         } catch (JSONException e) {
             Log.e(TAG, "ERROR: " + e.getMessage(), e);
         }
-        if (argumentsMap.containsKey(ARG_FILENAME)) {
+        if (argumentsMap.containsKey(ARG_FILENAME) && argumentsMap.get(ARG_FILENAME) != null) {
             filename = argumentsMap.get(ARG_FILENAME).toString();
         }
-        if (argumentsMap.containsKey(ARG_CHECKSUM)) {
+        if (argumentsMap.containsKey(ARG_CHECKSUM) && argumentsMap.get(ARG_CHECKSUM) != null) {
             checksum = argumentsMap.get(ARG_CHECKSUM).toString();
         }
 
