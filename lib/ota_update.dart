@@ -7,30 +7,30 @@ import 'package:flutter/services.dart';
 /// On Android it downloads the file (with progress reporting) and triggers app installation intent.
 /// On iOS it opens safari with specified ipa url. (not yet functioning)
 class OtaUpdate {
-  static const EventChannel _progressChannel = const EventChannel('sk.fourq.ota_update');
+  static const EventChannel _progressChannel = EventChannel('sk.fourq.ota_update');
   Stream<OtaEvent> _progressStream;
 
   /// Execute download and instalation of the plugin.
   /// Download progress and all success or error states are publish in stream as OtaEvent
   Stream<OtaEvent> execute(
     String url, {
-    Map<String, String> headers = const {},
+    Map<String, String> headers = const <String, String>{},
     String androidProviderAuthority,
     String destinationFilename,
     String sha256checksum,
   }) {
-    if (destinationFilename != null && destinationFilename.contains("/")) {
+    if (destinationFilename != null && destinationFilename.contains('/')) {
       throw OtaUpdateException('Invalid filename $destinationFilename');
     }
     final StreamController<OtaEvent> controller = StreamController<OtaEvent>.broadcast();
     if (_progressStream == null) {
       _progressChannel.receiveBroadcastStream(
-        {
-          "url": url,
-          "androidProviderAuthority": androidProviderAuthority,
-          "filename": destinationFilename,
-          "checksum": sha256checksum,
-          "headers": jsonEncode(headers)
+        <dynamic, dynamic>{
+          'url': url,
+          'androidProviderAuthority': androidProviderAuthority,
+          'filename': destinationFilename,
+          'checksum': sha256checksum,
+          'headers': jsonEncode(headers)
         },
       ).listen((dynamic event) {
         final OtaEvent otaEvent = _toOtaEvent(event.cast<String>());
@@ -94,15 +94,17 @@ enum OtaStatus {
 /// THIS IS USED CURRENTLY ONLY FOR INPUT PARAMETER VERIFICATION ERRORS. IF THERE IS PROBLEM WITH
 /// DOWNLOADING THE FILE OR RUNNING UPDATE OtaEvent WITH ONE OF THE _ERROR STATUSES IS USED
 class OtaUpdateException implements Exception {
-  /// ERROR MESSAGE
-  final message;
-
   /// DEFAULT CONSTRUCTOR
   OtaUpdateException(this.message);
 
+  /// ERROR MESSAGE
+  final String message;
+
   @override
   String toString() {
-    if (message == null) return "Exception";
-    return "Exception: $message";
+    if (message == null) {
+      return 'Exception';
+    }
+    return 'Exception: $message';
   }
 }

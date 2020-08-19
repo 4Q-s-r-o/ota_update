@@ -5,6 +5,7 @@ import 'package:ota_update/ota_update.dart';
 
 void main() => runApp(MyApp());
 
+/// example widget for ota_update plugin
 class MyApp extends StatefulWidget {
   @override
   _MyAppState createState() => _MyAppState();
@@ -27,13 +28,14 @@ class _MyAppState extends State<MyApp> {
         'https://internal1.4q.sk/flutter_hello_world.apk',
         destinationFilename: 'flutter_hello_world.apk',
         //FOR NOW ANDROID ONLY - ABILITY TO VALIDATE CHECKSUM OF FILE:
-        sha256checksum: "d6da28451a1e15cf7a75f2c3f151befad3b80ad0bb232ab15c20897e54f21478",
+        sha256checksum: 'd6da28451a1e15cf7a75f2c3f151befad3b80ad0bb232ab15c20897e54f21478',
       )
           .listen(
         (OtaEvent event) {
           setState(() => currentEvent = event);
         },
       );
+      // ignore: avoid_catches_without_on_clauses
     } catch (e) {
       print('Failed to make OTA update. Details: $e');
     }
