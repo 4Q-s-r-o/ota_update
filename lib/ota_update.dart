@@ -7,22 +7,24 @@ import 'package:flutter/services.dart';
 /// On Android it downloads the file (with progress reporting) and triggers app installation intent.
 /// On iOS it opens safari with specified ipa url. (not yet functioning)
 class OtaUpdate {
-  static const EventChannel _progressChannel = EventChannel('sk.fourq.ota_update');
-  Stream<OtaEvent> _progressStream;
+  static const EventChannel _progressChannel =
+      EventChannel('sk.fourq.ota_update');
+  Stream<OtaEvent>? _progressStream;
 
   /// Execute download and instalation of the plugin.
   /// Download progress and all success or error states are publish in stream as OtaEvent
   Stream<OtaEvent> execute(
     String url, {
     Map<String, String> headers = const <String, String>{},
-    String androidProviderAuthority,
-    String destinationFilename,
-    String sha256checksum,
+    String? androidProviderAuthority,
+    String? destinationFilename,
+    String? sha256checksum,
   }) {
     if (destinationFilename != null && destinationFilename.contains('/')) {
       throw OtaUpdateException('Invalid filename $destinationFilename');
     }
-    final StreamController<OtaEvent> controller = StreamController<OtaEvent>.broadcast();
+    final StreamController<OtaEvent> controller =
+        StreamController<OtaEvent>.broadcast();
     if (_progressStream == null) {
       _progressChannel.receiveBroadcastStream(
         <dynamic, dynamic>{
@@ -40,28 +42,29 @@ class OtaUpdate {
         }
       }).onError((Object error) {
         if (error is PlatformException) {
-          controller.add(_toOtaEvent(<String>[error.code, error.message]));
+          controller.add(_toOtaEvent(<String?>[error.code, error.message]));
         }
       });
       _progressStream = controller.stream;
     }
-    return _progressStream;
+    return _progressStream!;
   }
 
-  OtaEvent _toOtaEvent(List<String> event) {
-    return OtaEvent()
-      ..status = OtaStatus.values[int.parse(event[0])]
-      ..value = event[1];
+  OtaEvent _toOtaEvent(List<String?> event) {
+    return OtaEvent(OtaStatus.values[int.parse(event[0]!)], event[1]);
   }
 }
 
 ///Event describing current status
 class OtaEvent {
+  ///Constructor for OtaEvent
+  OtaEvent(this.status, this.value);
+
   /// Current status as enum value
   OtaStatus status;
 
   /// Additional status info e.g. percents downloaded or error message (can be null)
-  String value;
+  String? value;
 }
 
 /// Enum values describing states
@@ -102,9 +105,6 @@ class OtaUpdateException implements Exception {
 
   @override
   String toString() {
-    if (message == null) {
-      return 'Exception';
-    }
     return 'Exception: $message';
   }
 }
