@@ -63,8 +63,24 @@ This will allow plugin to access the downloads folder to start the update.
 
 See [filepaths.xml](example/android/app/src/main/res/xml/filepaths.xml) in example
 
+### Non-https traffic
+Cleartext traffic is disabled by Android download manager by default for security reasons. To [allow](https://stackoverflow.com/questions/51770323/how-to-solve-android-p-downloadmanager-stopping-with-cleartext-http-traffic-to) it you need to create file `res/xml/network_security_config.xml`
+
+```
+<?xml version="1.0" encoding="utf-8"?>
+<network-security-config>
+    <base-config cleartextTrafficPermitted="true" />
+</network-security-config>
+```
+
+and reference it in `AndroidManifest.xml` in application tag
+
+```
+android:networkSecurityConfig="@xml/network_security_config"
+```
+
 #### Note
-Google Play Protect may in some cases cause problems with installation. 
+* Google Play Protect may in some cases cause problems with installation.
 
 ## Statuses
 * DOWNLOADING: 
