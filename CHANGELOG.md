@@ -1,3 +1,5 @@
+# 3.0.0-nullsafety
+* Null-safety migration
 ## 2.4.1
 * Fixed null pointer when passing null as checksum or filename (chronm)
 ## 2.4.0
