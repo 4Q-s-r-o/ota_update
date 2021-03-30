@@ -1,3 +1,5 @@
+# 3.0.1
+* removed old deprectated localization file
 # 3.0.0
 * Stable release of null safety
 # 3.0.0-nullsafety
