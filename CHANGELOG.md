@@ -1,3 +1,5 @@
+# 3.0.2
+* checking if file is downloaded before running update, because download manager reports canceled download as done. This is not 100% solution, and fails if there is file with same name but it will solve some of the crashes on failed downloads. Please note that if you suply sha256 sum of the file plugin will verify integrity of the downloaded file. 
 # 3.0.1
 * removed old deprectated localization file
 # 3.0.0

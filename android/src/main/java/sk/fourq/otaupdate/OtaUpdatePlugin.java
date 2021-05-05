@@ -218,6 +218,15 @@ public class OtaUpdatePlugin implements EventChannel.StreamHandler, PluginRegist
                     //DOWNLOAD IS COMPLETE, UNREGISTER RECEIVER AND CLOSE PROGRESS SINK
                     context.unregisterReceiver(this);
                     File downloadedFile = new File(destination);
+                    if (!downloadedFile.exists()) {
+                        if (progressSink != null) {
+                            progressSink.error("" + OtaStatus.DOWNLOAD_ERROR.ordinal(), "File was not downloaded", null);
+                            progressSink.endOfStream();
+                            progressSink = null;
+                        }
+                        return;
+                    }
+
                     if (checksum != null) {
                         //IF user provided checksum verify file integrity
                         try {
@@ -227,8 +236,8 @@ public class OtaUpdatePlugin implements EventChannel.StreamHandler, PluginRegist
                                     progressSink.error("" + OtaStatus.CHECKSUM_ERROR.ordinal(), "Checksum verification failed", null);
                                     progressSink.endOfStream();
                                     progressSink = null;
-                                    return;
                                 }
+                                return;
                             }
                         } catch (RuntimeException ex) {
                             //SEND CHECKSUM ERROR EVENT
@@ -236,8 +245,8 @@ public class OtaUpdatePlugin implements EventChannel.StreamHandler, PluginRegist
                                 progressSink.error("" + OtaStatus.CHECKSUM_ERROR.ordinal(), ex.getMessage(), null);
                                 progressSink.endOfStream();
                                 progressSink = null;
-                                return;
                             }
+                            return;
                         }
                     }
                     //TRIGGER APK INSTALLATION
