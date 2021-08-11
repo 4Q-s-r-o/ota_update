@@ -2,6 +2,7 @@ package sk.fourq.otaupdate;
 
 import android.Manifest;
 import android.annotation.TargetApi;
+import android.app.Activity;
 import android.app.DownloadManager;
 import android.content.BroadcastReceiver;
 import android.content.Context;
@@ -22,9 +23,12 @@ import org.json.JSONObject;
 import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
 import androidx.core.content.FileProvider;
+import io.flutter.embedding.engine.plugins.FlutterPlugin;
+import io.flutter.embedding.engine.plugins.activity.ActivityAware;
+import io.flutter.embedding.engine.plugins.activity.ActivityPluginBinding;
 import io.flutter.plugin.common.EventChannel;
+import io.flutter.plugin.common.BinaryMessenger;
 import io.flutter.plugin.common.PluginRegistry;
-import io.flutter.plugin.common.PluginRegistry.Registrar;
 
 import java.io.File;
 import java.util.Arrays;
@@ -35,77 +39,92 @@ import java.util.Map;
  * OtaUpdatePlugin
  */
 @TargetApi(Build.VERSION_CODES.M)
-public class OtaUpdatePlugin implements EventChannel.StreamHandler, PluginRegistry.RequestPermissionsResultListener {
+public class OtaUpdatePlugin implements FlutterPlugin, ActivityAware, EventChannel.StreamHandler, PluginRegistry.RequestPermissionsResultListener {
 
+    //CONSTANTS
     private static final String BYTES_DOWNLOADED = "BYTES_DOWNLOADED";
     private static final String BYTES_TOTAL = "BYTES_TOTAL";
     private static final String ERROR = "ERROR";
-    public static final String ARG_URL = "url";
-    public static final String ARG_HEADERS = "headers";
-    public static final String ARG_FILENAME = "filename";
-    public static final String ARG_CHECKSUM = "checksum";
-    public static final String ARG_ANDROID_PROVIDER_AUTHORITY = "androidProviderAuthority";
-    public static final long MAX_WAIT_FOR_DOWNLOAD_START = 5000; //5s
+    private static final String ARG_URL = "url";
+    private static final String ARG_HEADERS = "headers";
+    private static final String ARG_FILENAME = "filename";
+    private static final String ARG_CHECKSUM = "checksum";
+    private static final String ARG_ANDROID_PROVIDER_AUTHORITY = "androidProviderAuthority";
+    private static final String TAG = "FLUTTER OTA";
+    private static final String DEFAULT_APK_NAME = "ota_update.apk";
+    private static final long MAX_WAIT_FOR_DOWNLOAD_START = 5000; //5s
 
-    enum OtaStatus {
-        DOWNLOADING,
-        INSTALLING,
-        ALREADY_RUNNING_ERROR,
-        PERMISSION_NOT_GRANTED_ERROR,
-        INTERNAL_ERROR,
-        DOWNLOAD_ERROR,
-        CHECKSUM_ERROR,
-    }
-
-    private final Registrar registrar;
+    //BASIC PLUGIN STATE
+    private Context context;
+    private Activity activity;
     private EventChannel.EventSink progressSink;
+    private Handler handler;
+    private String androidProviderAuthority;
+    private BinaryMessenger messanger;
+
+    //DOWNLOAD SPECIFIC PLUGIN STATE. PLUGIN SUPPORT ONLY ONE DOWNLOAD AT A TIME
     private String downloadUrl;
     private JSONObject headers;
     private String filename;
     private String checksum;
-    private String androidProviderAuthority = "sk.fourq.ota_update.provider"; //FALLBACK provider authority
-    private static final String TAG = "FLUTTER OTA";
-    private Handler handler;
-    private Context context;
-
-    private OtaUpdatePlugin(Registrar registrar) {
-        this.registrar = registrar;
-        context = (registrar.activity() != null) ? registrar.activity() : registrar.context();
-        handler = new Handler(context.getMainLooper()) {
-            @Override
-            public void handleMessage(Message msg) {
-                super.handleMessage(msg);
-                if (progressSink != null) {
-                    Bundle data = msg.getData();
-                    if (data.containsKey(ERROR)) {
-                        reportError(OtaStatus.DOWNLOAD_ERROR, data.getString(ERROR));
-                    } else {
-                        long bytesDownloaded = data.getLong(BYTES_DOWNLOADED);
-                        long bytesTotal = data.getLong(BYTES_TOTAL);
-                        progressSink.success(Arrays.asList("" + OtaStatus.DOWNLOADING.ordinal(), "" + ((bytesDownloaded * 100) / bytesTotal)));
-                    }
-                }
-            }
-        };
-    }
 
     /**
-     * Plugin registration.
+     * Legacy plugin initialization for embedding v1. This method provides backwards compatibility.
+     *
+     * @param registrar v1 embedding registration
      */
-    public static void registerWith(Registrar registrar) {
-        OtaUpdatePlugin plugin = new OtaUpdatePlugin(registrar);
-        final EventChannel progressChannel = new EventChannel(registrar.messenger(), "sk.fourq.ota_update");
-        progressChannel.setStreamHandler(plugin);
+    public static void registerWith(io.flutter.plugin.common.PluginRegistry.Registrar registrar) {
+        Log.d(TAG, "registerWith");
+        OtaUpdatePlugin plugin = new OtaUpdatePlugin();
+        plugin.initialize(registrar.context(), registrar.messenger());
+        plugin.activity = registrar.activity();
         registrar.addRequestPermissionsResultListener(plugin);
     }
 
+    //FLUTTER EMBEDDING V2 - PLUGIN BINDING
+    @Override
+    public void onAttachedToEngine(FlutterPluginBinding binding) {
+        Log.d(TAG, "onAttachedToEngine");
+        initialize(binding.getApplicationContext(), binding.getBinaryMessenger());
+    }
+
+    @Override
+    public void onDetachedFromEngine(FlutterPluginBinding binding) {
+        Log.d(TAG, "onDetachedFromEngine");
+    }
+
+    //FLUTTER EMBEDDING V2 - ACTIVITY BINDING. PLUGIN USES ACTIVITY FOR PERMISSION REQUESTS
+    @Override
+    public void onAttachedToActivity(ActivityPluginBinding activityPluginBinding) {
+        Log.d(TAG, "onAttachedToActivity");
+        activityPluginBinding.addRequestPermissionsResultListener(this);
+        activity = activityPluginBinding.getActivity();
+    }
+
+    @Override
+    public void onDetachedFromActivityForConfigChanges() {
+        Log.d(TAG, "onDetachedFromActivityForConfigChanges");
+    }
+
+    @Override
+    public void onReattachedToActivityForConfigChanges(ActivityPluginBinding activityPluginBinding) {
+        Log.d(TAG, "onReattachedToActivityForConfigChanges");
+    }
+
+    @Override
+    public void onDetachedFromActivity() {
+        Log.d(TAG, "onDetachedFromActivity");
+    }
+
+    //STREAM LISTENER
     @Override
     public void onListen(Object arguments, EventChannel.EventSink events) {
         if (progressSink != null) {
-            progressSink.error("" + OtaStatus.ALREADY_RUNNING_ERROR.ordinal(), "Method call was cancelled. One method call is already running", null);
+            progressSink.error("" + OtaStatus.ALREADY_RUNNING_ERROR.ordinal(), "Method call was cancelled. One method call is already running!", null);
         }
-        Log.d(TAG, "OTA UPDATE ON LISTEN");
+        Log.d(TAG, "STREAM OPENED");
         progressSink = events;
+        //READ ARGUMENTS FROM CALL
         Map argumentsMap = ((Map) arguments);
         downloadUrl = argumentsMap.get(ARG_URL).toString();
         try {
@@ -118,11 +137,12 @@ public class OtaUpdatePlugin implements EventChannel.StreamHandler, PluginRegist
         }
         if (argumentsMap.containsKey(ARG_FILENAME) && argumentsMap.get(ARG_FILENAME) != null) {
             filename = argumentsMap.get(ARG_FILENAME).toString();
+        } else {
+            filename = DEFAULT_APK_NAME;
         }
         if (argumentsMap.containsKey(ARG_CHECKSUM) && argumentsMap.get(ARG_CHECKSUM) != null) {
             checksum = argumentsMap.get(ARG_CHECKSUM).toString();
         }
-
         // user-provided provider authority
         Object authority = ((Map) arguments).get(ARG_ANDROID_PROVIDER_AUTHORITY);
         if (authority != null) {
@@ -131,28 +151,25 @@ public class OtaUpdatePlugin implements EventChannel.StreamHandler, PluginRegist
             androidProviderAuthority = context.getPackageName() + "." + "ota_update_provider";
         }
 
-        if (
-//                PackageManager.PERMISSION_GRANTED == ContextCompat.checkSelfPermission(registrar.context(), Manifest.permission.ACCESS_WIFI_STATE) &&
-//                PackageManager.PERMISSION_GRANTED == ContextCompat.checkSelfPermission(registrar.context(), Manifest.permission.ACCESS_NETWORK_STATE) &&
-                PackageManager.PERMISSION_GRANTED == ContextCompat.checkSelfPermission(registrar.context(), Manifest.permission.WRITE_EXTERNAL_STORAGE)) {
-            handleCall();
+        if (PackageManager.PERMISSION_GRANTED == ContextCompat.checkSelfPermission(context, Manifest.permission.WRITE_EXTERNAL_STORAGE)) {
+            executeDownload();
         } else {
             String[] permissions = {
-//                    Manifest.permission.ACCESS_WIFI_STATE,
-//                    Manifest.permission.ACCESS_NETWORK_STATE,
                     Manifest.permission.WRITE_EXTERNAL_STORAGE
             };
-            ActivityCompat.requestPermissions(registrar.activity(), permissions, 0);
+            ActivityCompat.requestPermissions(activity, permissions, 0);
         }
     }
 
     @Override
     public void onCancel(Object o) {
+        Log.d(TAG, "STREAM CLOSED");
         progressSink = null;
     }
 
     @Override
     public boolean onRequestPermissionsResult(int requestCode, String[] strings, int[] grantResults) {
+        Log.d(TAG, "REQUEST PERMISSIONS RESULT RECEIVED");
         if (requestCode == 0 && grantResults.length > 0) {
             for (int grantResult : grantResults) {
                 if (grantResult != PackageManager.PERMISSION_GRANTED) {
@@ -161,7 +178,7 @@ public class OtaUpdatePlugin implements EventChannel.StreamHandler, PluginRegist
                     return false;
                 }
             }
-            handleCall();
+            executeDownload();
             return true;
         } else {
             if (progressSink != null) {
@@ -172,16 +189,17 @@ public class OtaUpdatePlugin implements EventChannel.StreamHandler, PluginRegist
         }
     }
 
-    private void handleCall() {
+    /**
+     * Execute download and start installation. This method is called either from onListen method
+     * or from onRequestPermissionsResult if user had to grant permissions.
+     */
+    private void executeDownload() {
         try {
             //PREPARE URLS
-            if (filename == null) {
-                filename = "ota_update.apk";
-            }
             final String destination = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS) + "/" + filename;
             final Uri fileUri = Uri.parse("file://" + destination);
 
-            //DELETE APK FILE IF SOME ALREADY EXISTS
+            //DELETE APK FILE IF IT ALREADY EXISTS
             File file = new File(destination);
             if (file.exists()) {
                 if (!file.delete()) {
@@ -189,7 +207,7 @@ public class OtaUpdatePlugin implements EventChannel.StreamHandler, PluginRegist
                 }
             }
 
-            Log.d(TAG, "OTA UPDATE ON STARTING DOWNLOAD");
+            Log.d(TAG, "DOWNLOAD STARTING");
             //CREATE DOWNLOAD MANAGER REQUEST
             DownloadManager.Request request = new DownloadManager.Request(Uri.parse(downloadUrl));
             if (headers != null) {
@@ -208,71 +226,16 @@ public class OtaUpdatePlugin implements EventChannel.StreamHandler, PluginRegist
             final DownloadManager manager = (DownloadManager) context.getSystemService(Context.DOWNLOAD_SERVICE);
             final long downloadId = manager.enqueue(request);
 
-            Log.d(TAG, "OTA UPDATE DOWNLOAD STARTED " + downloadId);
+            Log.d(TAG, "DOWNLOAD STARTED WITH ID " + downloadId);
             //START TRACKING DOWNLOAD PROGRESS IN SEPARATE THREAD
             trackDownloadProgress(downloadId, manager);
 
             //REGISTER LISTENER TO KNOW WHEN DOWNLOAD IS COMPLETE
             context.registerReceiver(new BroadcastReceiver() {
+                @Override
                 public void onReceive(Context c, Intent i) {
-                    //DOWNLOAD IS COMPLETE, UNREGISTER RECEIVER AND CLOSE PROGRESS SINK
                     context.unregisterReceiver(this);
-                    File downloadedFile = new File(destination);
-                    if (!downloadedFile.exists()) {
-                        if (progressSink != null) {
-                            progressSink.error("" + OtaStatus.DOWNLOAD_ERROR.ordinal(), "File was not downloaded", null);
-                            progressSink.endOfStream();
-                            progressSink = null;
-                        }
-                        return;
-                    }
-
-                    if (checksum != null) {
-                        //IF user provided checksum verify file integrity
-                        try {
-                            if (!Sha256ChecksumValidator.validateChecksum(checksum, downloadedFile)) {
-                                //SEND CHECKSUM ERROR EVENT
-                                if (progressSink != null) {
-                                    progressSink.error("" + OtaStatus.CHECKSUM_ERROR.ordinal(), "Checksum verification failed", null);
-                                    progressSink.endOfStream();
-                                    progressSink = null;
-                                }
-                                return;
-                            }
-                        } catch (RuntimeException ex) {
-                            //SEND CHECKSUM ERROR EVENT
-                            if (progressSink != null) {
-                                progressSink.error("" + OtaStatus.CHECKSUM_ERROR.ordinal(), ex.getMessage(), null);
-                                progressSink.endOfStream();
-                                progressSink = null;
-                            }
-                            return;
-                        }
-                    }
-                    //TRIGGER APK INSTALLATION
-                    Intent intent;
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-                        //AUTHORITY NEEDS TO BE THE SAME ALSO IN MANIFEST
-                        Uri apkUri = FileProvider.getUriForFile(context, androidProviderAuthority, downloadedFile);
-                        intent = new Intent(Intent.ACTION_INSTALL_PACKAGE);
-                        intent.setData(apkUri);
-                        intent.setFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-                    } else {
-                        intent = new Intent(Intent.ACTION_VIEW);
-                        intent.setDataAndType(fileUri, "application/vnd.android.package-archive");
-                        intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-                    }
-                    //SEND INSTALLING EVENT
-                    if (progressSink != null) {
-                        //NOTE: We have to start intent before sending event to stream
-                        //if application tries to programatically terminate app it may produce race condition
-                        //and application may end before intent is dispatched
-                        context.startActivity(intent);
-                        progressSink.success(Arrays.asList("" + OtaStatus.INSTALLING.ordinal(), ""));
-                        progressSink.endOfStream();
-                        progressSink = null;
-                    }
+                    onDownloadComplete(destination, fileUri);
                 }
             }, new IntentFilter(DownloadManager.ACTION_DOWNLOAD_COMPLETE));
         } catch (Exception e) {
@@ -284,12 +247,101 @@ public class OtaUpdatePlugin implements EventChannel.StreamHandler, PluginRegist
         }
     }
 
+    /**
+     * Download has been completed
+     *
+     * 1. Check if file exists
+     * 2. If checksum was provided, compute downloaded file checksum and compare with provided value
+     * 3. If checks above pass, trigger installation
+     *
+     * @param destination Destination path
+     * @param fileUri     Uri to file
+     */
+    private void onDownloadComplete(String destination, Uri fileUri) {
+        //DOWNLOAD IS COMPLETE, UNREGISTER RECEIVER AND CLOSE PROGRESS SINK
+        File downloadedFile = new File(destination);
+        if (!downloadedFile.exists()) {
+            if (progressSink != null) {
+                progressSink.error("" + OtaStatus.DOWNLOAD_ERROR.ordinal(), "File was not downloaded", null);
+                progressSink.endOfStream();
+                progressSink = null;
+            }
+            return;
+        }
+
+        if (checksum != null) {
+            //IF user provided checksum verify file integrity
+            try {
+                if (!Sha256ChecksumValidator.validateChecksum(checksum, downloadedFile)) {
+                    //SEND CHECKSUM ERROR EVENT
+                    if (progressSink != null) {
+                        progressSink.error("" + OtaStatus.CHECKSUM_ERROR.ordinal(), "Checksum verification failed", null);
+                        progressSink.endOfStream();
+                        progressSink = null;
+                    }
+                    return;
+                }
+            } catch (RuntimeException ex) {
+                //SEND CHECKSUM ERROR EVENT
+                if (progressSink != null) {
+                    progressSink.error("" + OtaStatus.CHECKSUM_ERROR.ordinal(), ex.getMessage(), null);
+                    progressSink.endOfStream();
+                    progressSink = null;
+                }
+                return;
+            }
+        }
+        //TRIGGER APK INSTALLATION
+        executeInstallation(fileUri, downloadedFile);
+    }
+
+    /**
+     * Execute installation
+     *
+     * For android API level >= 24 start intent for ACTION_INSTALL_PACKAGE (native installer)
+     * For android API level < 24 start intent ACTION_VIEW (open file, android should prompt for installation)
+     *
+     * @param fileUri        Uri for file path
+     * @param downloadedFile Downloaded file
+     */
+    private void executeInstallation(Uri fileUri, File downloadedFile) {
+        Intent intent;
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+            //AUTHORITY NEEDS TO BE THE SAME ALSO IN MANIFEST
+            Uri apkUri = FileProvider.getUriForFile(context, androidProviderAuthority, downloadedFile);
+            intent = new Intent(Intent.ACTION_INSTALL_PACKAGE);
+            intent.setData(apkUri);
+            intent.setFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+        } else {
+            intent = new Intent(Intent.ACTION_VIEW);
+            intent.setDataAndType(fileUri, "application/vnd.android.package-archive");
+            intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+        }
+        //SEND INSTALLING EVENT
+        if (progressSink != null) {
+            //NOTE: We have to start intent before sending event to stream
+            //if application tries to programatically terminate app it may produce race condition
+            //and application may end before intent is dispatched
+            context.startActivity(intent);
+            progressSink.success(Arrays.asList("" + OtaStatus.INSTALLING.ordinal(), ""));
+            progressSink.endOfStream();
+            progressSink = null;
+        }
+    }
+
+    /**
+     * Helper method that spawns thread, which will periodically check for status
+     *
+     * @param downloadId ID of the download
+     * @param manager    Download manager instance
+     */
     private void trackDownloadProgress(final long downloadId, final DownloadManager manager) {
-        Log.d(TAG, "OTA UPDATE TRACK DOWNLOAD STARTED " + downloadId);
+        Log.d(TAG, "TRACK DOWNLOAD STARTED " + downloadId);
         new Thread(new Runnable() {
             @Override
             public void run() {
-                Log.d(TAG, "OTA UPDATE TRACK DOWNLOAD THREAD STARTED " + downloadId);
+                Log.d(TAG, "TRACK DOWNLOAD THREAD STARTED " + downloadId);
                 //REPORT PROGRESS WHILE DOWNLOAD STILL RUNS
                 boolean downloading = true;
                 boolean hasStatus = false;
@@ -361,10 +413,57 @@ public class OtaUpdatePlugin implements EventChannel.StreamHandler, PluginRegist
         }).start();
     }
 
-    private void reportError(OtaStatus internalError, String s) {
+    /**
+     * Report error to the dart code
+     *
+     * @param otaStatus Status to report
+     * @param s         Error message to report
+     */
+    private void reportError(OtaStatus otaStatus, String s) {
         if (progressSink != null) {
-            progressSink.error("" + internalError.ordinal(), s, null);
+            progressSink.error("" + otaStatus.ordinal(), s, null);
             progressSink = null;
         }
+    }
+
+    /**
+     * Initialization. Shared for embedding v1 and v2
+     *
+     * @param context   ApplicationContext
+     * @param messanger BinaryMessanger for communication with dart
+     */
+    private void initialize(Context context, BinaryMessenger messanger) {
+        this.context = context;
+        handler = new Handler(context.getMainLooper()) {
+            @Override
+            public void handleMessage(Message msg) {
+                super.handleMessage(msg);
+                if (progressSink != null) {
+                    Bundle data = msg.getData();
+                    if (data.containsKey(ERROR)) {
+                        reportError(OtaStatus.DOWNLOAD_ERROR, data.getString(ERROR));
+                    } else {
+                        long bytesDownloaded = data.getLong(BYTES_DOWNLOADED);
+                        long bytesTotal = data.getLong(BYTES_TOTAL);
+                        progressSink.success(Arrays.asList("" + OtaStatus.DOWNLOADING.ordinal(), "" + ((bytesDownloaded * 100) / bytesTotal)));
+                    }
+                }
+            }
+        };
+        final EventChannel progressChannel = new EventChannel(messanger, "sk.fourq.ota_update");
+        progressChannel.setStreamHandler(this);
+    }
+
+    /**
+     * All statuses reported by the plugin
+     */
+    private enum OtaStatus {
+        DOWNLOADING,
+        INSTALLING,
+        ALREADY_RUNNING_ERROR,
+        PERMISSION_NOT_GRANTED_ERROR,
+        INTERNAL_ERROR,
+        DOWNLOAD_ERROR,
+        CHECKSUM_ERROR,
     }
 }
