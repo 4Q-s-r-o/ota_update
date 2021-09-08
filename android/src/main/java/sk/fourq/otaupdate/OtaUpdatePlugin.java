@@ -153,6 +153,7 @@ public class OtaUpdatePlugin implements FlutterPlugin, ActivityAware, EventChann
 
         if (PackageManager.PERMISSION_GRANTED == ContextCompat.checkSelfPermission(context, Manifest.permission.WRITE_EXTERNAL_STORAGE)) {
             executeDownload();
+            // downloadFile();
         } else {
             String[] permissions = {
                     Manifest.permission.WRITE_EXTERNAL_STORAGE
@@ -167,6 +168,49 @@ public class OtaUpdatePlugin implements FlutterPlugin, ActivityAware, EventChann
         progressSink = null;
     }
 
+    private long downloadFile() {
+
+        // PREPARE URLS
+        final String destination = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS) + "/"
+                + filename;
+        final Uri fileUri = Uri.parse("file://" + destination);
+        
+        long downloadReference = 0;
+
+        final DownloadManager downloadManager = (DownloadManager) context.getSystemService(Context.DOWNLOAD_SERVICE);
+        try {
+            DownloadManager.Request request = new DownloadManager.Request(Uri.parse(downloadUrl));
+
+            // Setting title of request
+            request.setTitle(filename);
+
+            // Setting description of request
+            request.setDescription("Your file is downloading");
+
+            // set notification when download completed
+            request.setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED);
+
+            // Set the local destination for the downloaded file to a path within the
+            // application's external files directory
+            request.setDestinationInExternalPublicDir(destination, filename);
+            // request.setDestinationUri(fileUri);
+            
+            request.allowScanningByMediaScanner();
+            request.setAllowedNetworkTypes(DownloadManager.Request.NETWORK_WIFI|DownloadManager.Request.NETWORK_MOBILE);
+            request.setAllowedOverMetered(true);
+            // Enqueue download and save the referenceId
+            downloadReference = downloadManager.enqueue(request);
+            Log.d(TAG, "DOWNLOAD STARTED WITH ID " + downloadReference);
+            // START TRACKING DOWNLOAD PROGRESS IN SEPARATE THREAD
+            trackDownloadProgress(downloadReference, downloadManager);
+        } catch (IllegalArgumentException e) {
+            // BaseUtils.showToast(mContext, "Download link is broken or not availale for download");
+            Log.e(TAG, "Line no: 455,Method: downloadFile: Download link is broken");
+
+        }
+        return downloadReference;
+    }
+
     @Override
     public boolean onRequestPermissionsResult(int requestCode, String[] strings, int[] grantResults) {
         Log.d(TAG, "REQUEST PERMISSIONS RESULT RECEIVED");
@@ -179,6 +223,7 @@ public class OtaUpdatePlugin implements FlutterPlugin, ActivityAware, EventChann
                 }
             }
             executeDownload();
+            // downloadFile();
             return true;
         } else {
             if (progressSink != null) {
@@ -209,6 +254,7 @@ public class OtaUpdatePlugin implements FlutterPlugin, ActivityAware, EventChann
 
             Log.d(TAG, "DOWNLOAD STARTING");
             //CREATE DOWNLOAD MANAGER REQUEST
+            Log.d(TAG, downloadUrl);
             DownloadManager.Request request = new DownloadManager.Request(Uri.parse(downloadUrl));
             if (headers != null) {
                 Iterator<String> jsonKeys = headers.keys();
@@ -221,6 +267,10 @@ public class OtaUpdatePlugin implements FlutterPlugin, ActivityAware, EventChann
 
             request.setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE);
             request.setDestinationUri(fileUri);
+            request.setAllowedNetworkTypes(
+                    DownloadManager.Request.NETWORK_WIFI | DownloadManager.Request.NETWORK_MOBILE);
+            request.setAllowedOverMetered(true);
+            request.setAllowedOverRoaming(true);
 
             //GET DOWNLOAD SERVICE AND ENQUEUE OUR DOWNLOAD REQUEST
             final DownloadManager manager = (DownloadManager) context.getSystemService(Context.DOWNLOAD_SERVICE);

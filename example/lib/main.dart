@@ -25,10 +25,10 @@ class _MyAppState extends State<MyApp> {
       //LINK CONTAINS APK OF FLUTTER HELLO WORLD FROM FLUTTER SDK EXAMPLES
       OtaUpdate()
           .execute(
-        'https://internal1.4q.sk/flutter_hello_world.apk',
-        destinationFilename: 'flutter_hello_world.apk',
+        'http://billing.fenaka.corp/files/reading_app.apk',
+        destinationFilename: 'reading_app.apk',
         //FOR NOW ANDROID ONLY - ABILITY TO VALIDATE CHECKSUM OF FILE:
-        sha256checksum: 'd6da28451a1e15cf7a75f2c3f151befad3b80ad0bb232ab15c20897e54f21478',
+        // sha256checksum: 'd6da28451a1e15cf7a75f2c3f151befad3b80ad0bb232ab15c20897e54f21478',
       )
           .listen(
         (OtaEvent event) {
