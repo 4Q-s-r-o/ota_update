@@ -1,3 +1,5 @@
+#3.1.1
+* Gradle upgrade
 # 3.1.0
 * Supporting flutter embedding v2
 * Minor refactoring to improve code readability
