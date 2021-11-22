@@ -1,3 +1,5 @@
+#4.0.1
+* Fixed remmant code after cleanup for version 4.0.0
 #4.0.0
 * Replaced android download manager with OkHttp
 * Minor code refactoring
