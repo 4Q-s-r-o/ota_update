@@ -3,25 +3,25 @@ package sk.fourq.otaupdate;
 import android.Manifest;
 import android.annotation.TargetApi;
 import android.app.Activity;
-import android.app.DownloadManager;
-import android.app.NotificationManager;
-import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
-import android.content.IntentFilter;
-import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageManager;
-import android.database.Cursor;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
-import android.os.Environment;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.Message;
 import android.util.Log;
-
-import androidx.core.app.NotificationCompat;
+import androidx.core.app.ActivityCompat;
+import androidx.core.content.ContextCompat;
+import androidx.core.content.FileProvider;
+import io.flutter.embedding.engine.plugins.FlutterPlugin;
+import io.flutter.embedding.engine.plugins.activity.ActivityAware;
+import io.flutter.embedding.engine.plugins.activity.ActivityPluginBinding;
+import io.flutter.plugin.common.BinaryMessenger;
+import io.flutter.plugin.common.EventChannel;
+import io.flutter.plugin.common.PluginRegistry;
 import okhttp3.Call;
 import okhttp3.Callback;
 import okhttp3.Interceptor;
@@ -33,23 +33,12 @@ import okio.Okio;
 import org.jetbrains.annotations.NotNull;
 import org.json.JSONException;
 import org.json.JSONObject;
-import androidx.core.app.ActivityCompat;
-import androidx.core.content.ContextCompat;
-import androidx.core.content.FileProvider;
-import io.flutter.embedding.engine.plugins.FlutterPlugin;
-import io.flutter.embedding.engine.plugins.activity.ActivityAware;
-import io.flutter.embedding.engine.plugins.activity.ActivityPluginBinding;
-import io.flutter.plugin.common.EventChannel;
-import io.flutter.plugin.common.BinaryMessenger;
-import io.flutter.plugin.common.PluginRegistry;
 
 import java.io.File;
 import java.io.IOException;
 import java.util.Arrays;
 import java.util.Iterator;
 import java.util.Map;
-import java.util.Random;
-import java.util.UUID;
 
 /**
  * OtaUpdatePlugin
@@ -68,7 +57,6 @@ public class OtaUpdatePlugin implements FlutterPlugin, ActivityAware, EventChann
     private static final String ARG_ANDROID_PROVIDER_AUTHORITY = "androidProviderAuthority";
     private static final String TAG = "FLUTTER OTA";
     private static final String DEFAULT_APK_NAME = "ota_update.apk";
-    private static final long MAX_WAIT_FOR_DOWNLOAD_START = 5000; //5s
 
     //BASIC PLUGIN STATE
     private Context context;
@@ -400,8 +388,6 @@ public class OtaUpdatePlugin implements FlutterPlugin, ActivityAware, EventChann
                     }
                 })
                 .build();
-
-        notifiactionManager = (NotificationManager) context.getSystemService(Context.NOTIFICATION_SERVICE);
     }
 
     @Override
