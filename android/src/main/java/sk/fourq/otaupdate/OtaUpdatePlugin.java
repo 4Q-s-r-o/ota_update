@@ -4,10 +4,12 @@ import android.Manifest;
 import android.annotation.TargetApi;
 import android.app.Activity;
 import android.app.DownloadManager;
+import android.app.NotificationManager;
 import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
+import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageManager;
 import android.database.Cursor;
 import android.net.Uri;
@@ -15,9 +17,20 @@ import android.os.Build;
 import android.os.Bundle;
 import android.os.Environment;
 import android.os.Handler;
+import android.os.Looper;
 import android.os.Message;
 import android.util.Log;
 
+import androidx.core.app.NotificationCompat;
+import okhttp3.Call;
+import okhttp3.Callback;
+import okhttp3.Interceptor;
+import okhttp3.OkHttpClient;
+import okhttp3.Request;
+import okhttp3.Response;
+import okio.BufferedSink;
+import okio.Okio;
+import org.jetbrains.annotations.NotNull;
 import org.json.JSONException;
 import org.json.JSONObject;
 import androidx.core.app.ActivityCompat;
@@ -31,15 +44,18 @@ import io.flutter.plugin.common.BinaryMessenger;
 import io.flutter.plugin.common.PluginRegistry;
 
 import java.io.File;
+import java.io.IOException;
 import java.util.Arrays;
 import java.util.Iterator;
 import java.util.Map;
+import java.util.Random;
+import java.util.UUID;
 
 /**
  * OtaUpdatePlugin
  */
 @TargetApi(Build.VERSION_CODES.M)
-public class OtaUpdatePlugin implements FlutterPlugin, ActivityAware, EventChannel.StreamHandler, PluginRegistry.RequestPermissionsResultListener {
+public class OtaUpdatePlugin implements FlutterPlugin, ActivityAware, EventChannel.StreamHandler, PluginRegistry.RequestPermissionsResultListener, ProgressListener {
 
     //CONSTANTS
     private static final String BYTES_DOWNLOADED = "BYTES_DOWNLOADED";
@@ -61,6 +77,7 @@ public class OtaUpdatePlugin implements FlutterPlugin, ActivityAware, EventChann
     private Handler handler;
     private String androidProviderAuthority;
     private BinaryMessenger messanger;
+    private OkHttpClient client;
 
     //DOWNLOAD SPECIFIC PLUGIN STATE. PLUGIN SUPPORT ONLY ONE DOWNLOAD AT A TIME
     private String downloadUrl;
@@ -173,18 +190,14 @@ public class OtaUpdatePlugin implements FlutterPlugin, ActivityAware, EventChann
         if (requestCode == 0 && grantResults.length > 0) {
             for (int grantResult : grantResults) {
                 if (grantResult != PackageManager.PERMISSION_GRANTED) {
-                    progressSink.error("" + OtaStatus.PERMISSION_NOT_GRANTED_ERROR.ordinal(), null, null);
-                    progressSink = null;
+                    reportError(OtaStatus.PERMISSION_NOT_GRANTED_ERROR, "Permission not granted", null);
                     return false;
                 }
             }
             executeDownload();
             return true;
         } else {
-            if (progressSink != null) {
-                progressSink.error("" + OtaStatus.PERMISSION_NOT_GRANTED_ERROR.ordinal(), null, null);
-                progressSink = null;
-            }
+            reportError(OtaStatus.PERMISSION_NOT_GRANTED_ERROR, "Permission not granted", null);
             return false;
         }
     }
@@ -195,55 +208,54 @@ public class OtaUpdatePlugin implements FlutterPlugin, ActivityAware, EventChann
      */
     private void executeDownload() {
         try {
+            String dataDir = context.getApplicationInfo().dataDir + "/files/ota_update";
             //PREPARE URLS
-            final String destination = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS) + "/" + filename;
+            final String destination = dataDir + "/" + filename;
             final Uri fileUri = Uri.parse("file://" + destination);
 
             //DELETE APK FILE IF IT ALREADY EXISTS
-            File file = new File(destination);
+            final File file = new File(destination);
             if (file.exists()) {
                 if (!file.delete()) {
-                    Log.e(TAG, "ERROR: unable to delete old apk file before starting OTA");
+                    Log.e(TAG, "WARNING: unable to delete old apk file before starting OTA");
+                }
+            } else {
+                if (!file.getParentFile().mkdirs()) {
+                    reportError(OtaStatus.INTERNAL_ERROR, "unable to create ota_update folder in internal storage", null);
                 }
             }
 
             Log.d(TAG, "DOWNLOAD STARTING");
-            //CREATE DOWNLOAD MANAGER REQUEST
-            DownloadManager.Request request = new DownloadManager.Request(Uri.parse(downloadUrl));
+            Request.Builder request = new Request.Builder()
+                    .url(downloadUrl);
             if (headers != null) {
                 Iterator<String> jsonKeys = headers.keys();
                 while (jsonKeys.hasNext()) {
                     String headerName = jsonKeys.next();
                     String headerValue = headers.getString(headerName);
-                    request.addRequestHeader(headerName, headerValue);
+                    request.addHeader(headerName, headerValue);
                 }
             }
 
-            request.setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE);
-            request.setDestinationUri(fileUri);
-
-            //GET DOWNLOAD SERVICE AND ENQUEUE OUR DOWNLOAD REQUEST
-            final DownloadManager manager = (DownloadManager) context.getSystemService(Context.DOWNLOAD_SERVICE);
-            final long downloadId = manager.enqueue(request);
-
-            Log.d(TAG, "DOWNLOAD STARTED WITH ID " + downloadId);
-            //START TRACKING DOWNLOAD PROGRESS IN SEPARATE THREAD
-            trackDownloadProgress(downloadId, manager);
-
-            //REGISTER LISTENER TO KNOW WHEN DOWNLOAD IS COMPLETE
-            context.registerReceiver(new BroadcastReceiver() {
+            client.newCall(request.build()).enqueue(new Callback() {
                 @Override
-                public void onReceive(Context c, Intent i) {
-                    context.unregisterReceiver(this);
+                public void onFailure(@NotNull Call call, @NotNull IOException e) {
+                    reportError(OtaStatus.DOWNLOAD_ERROR, e.getMessage(), e);
+                }
+
+                @Override
+                public void onResponse(@NotNull Call call, @NotNull Response response) throws IOException {
+                    if (!response.isSuccessful()) {
+                        reportError(OtaStatus.DOWNLOAD_ERROR, "Http request finished with status " + response.code(), null);
+                    }
+                    BufferedSink sink = Okio.buffer(Okio.sink(file));
+                    sink.writeAll(response.body().source());
+                    sink.close();
                     onDownloadComplete(destination, fileUri);
                 }
-            }, new IntentFilter(DownloadManager.ACTION_DOWNLOAD_COMPLETE));
+            });
         } catch (Exception e) {
-            if (progressSink != null) {
-                progressSink.error("" + OtaStatus.INTERNAL_ERROR.ordinal(), e.getMessage(), null);
-                progressSink = null;
-            }
-            Log.e(TAG, "ERROR: " + e.getMessage(), e);
+            reportError(OtaStatus.INTERNAL_ERROR, e.getMessage(), e);
         }
     }
 
@@ -257,15 +269,11 @@ public class OtaUpdatePlugin implements FlutterPlugin, ActivityAware, EventChann
      * @param destination Destination path
      * @param fileUri     Uri to file
      */
-    private void onDownloadComplete(String destination, Uri fileUri) {
+    private void onDownloadComplete(final String destination, final Uri fileUri) {
         //DOWNLOAD IS COMPLETE, UNREGISTER RECEIVER AND CLOSE PROGRESS SINK
-        File downloadedFile = new File(destination);
+        final File downloadedFile = new File(destination);
         if (!downloadedFile.exists()) {
-            if (progressSink != null) {
-                progressSink.error("" + OtaStatus.DOWNLOAD_ERROR.ordinal(), "File was not downloaded", null);
-                progressSink.endOfStream();
-                progressSink = null;
-            }
+            reportError(OtaStatus.DOWNLOAD_ERROR, "File was not downloaded", null);
             return;
         }
 
@@ -274,25 +282,24 @@ public class OtaUpdatePlugin implements FlutterPlugin, ActivityAware, EventChann
             try {
                 if (!Sha256ChecksumValidator.validateChecksum(checksum, downloadedFile)) {
                     //SEND CHECKSUM ERROR EVENT
-                    if (progressSink != null) {
-                        progressSink.error("" + OtaStatus.CHECKSUM_ERROR.ordinal(), "Checksum verification failed", null);
-                        progressSink.endOfStream();
-                        progressSink = null;
-                    }
+                    reportError(OtaStatus.CHECKSUM_ERROR, "Checksum verification failed", null);
                     return;
                 }
             } catch (RuntimeException ex) {
                 //SEND CHECKSUM ERROR EVENT
-                if (progressSink != null) {
-                    progressSink.error("" + OtaStatus.CHECKSUM_ERROR.ordinal(), ex.getMessage(), null);
-                    progressSink.endOfStream();
-                    progressSink = null;
-                }
+                reportError(OtaStatus.CHECKSUM_ERROR, ex.getMessage(), ex);
                 return;
             }
         }
         //TRIGGER APK INSTALLATION
-        executeInstallation(fileUri, downloadedFile);
+        handler.post(new Runnable() {
+                         @Override
+                         public void run() {
+                             executeInstallation(fileUri, downloadedFile);
+                         }
+                     }
+
+        );
     }
 
     /**
@@ -331,98 +338,26 @@ public class OtaUpdatePlugin implements FlutterPlugin, ActivityAware, EventChann
     }
 
     /**
-     * Helper method that spawns thread, which will periodically check for status
-     *
-     * @param downloadId ID of the download
-     * @param manager    Download manager instance
-     */
-    private void trackDownloadProgress(final long downloadId, final DownloadManager manager) {
-        Log.d(TAG, "TRACK DOWNLOAD STARTED " + downloadId);
-        new Thread(new Runnable() {
-            @Override
-            public void run() {
-                Log.d(TAG, "TRACK DOWNLOAD THREAD STARTED " + downloadId);
-                //REPORT PROGRESS WHILE DOWNLOAD STILL RUNS
-                boolean downloading = true;
-                boolean hasStatus = false;
-                long downloadStart = System.currentTimeMillis();
-                while (downloading) {
-                    //QUERY CURRENT PROGRESS STATUS
-                    DownloadManager.Query q = new DownloadManager.Query();
-                    q.setFilterById(downloadId);
-                    Cursor c = manager.query(q);
-                    if (c.moveToFirst()) {
-                        hasStatus = true;
-                        //PUSH THE STATUS THROUGH THE SINK
-                        long bytes_downloaded = c.getLong(c.getColumnIndex(DownloadManager.COLUMN_BYTES_DOWNLOADED_SO_FAR));
-                        long bytes_total = c.getLong(c.getColumnIndex(DownloadManager.COLUMN_TOTAL_SIZE_BYTES));
-                        if (progressSink != null && bytes_total > 0) {
-                            Message message = new Message();
-                            Bundle data = new Bundle();
-                            data.putLong(BYTES_DOWNLOADED, bytes_downloaded);
-                            data.putLong(BYTES_TOTAL, bytes_total);
-                            message.setData(data);
-                            handler.sendMessage(message);
-                        }
-                        //STOP CYCLE IF DOWNLOAD IS COMPLETE
-                        int status = c.getInt(c.getColumnIndex(DownloadManager.COLUMN_STATUS));
-
-                        if (status == DownloadManager.STATUS_SUCCESSFUL) { //sucess
-                            Log.d(TAG, "OTA UPDATE SUCCESS");
-                            downloading = false;
-                        } else if (status == DownloadManager.STATUS_PENDING) { //running
-                            Log.d(TAG, "OTA UPDATE PENDING");
-                        } else if (status == DownloadManager.STATUS_RUNNING) { //running
-                            Log.d(TAG, "OTA UPDATE TRACK DOWNLOAD RUNNING ");
-                        } else if (status == DownloadManager.STATUS_FAILED) { //failed
-                            downloading = false;
-                            Log.d(TAG, "OTA UPDATE FAILURE: " + c.getInt(c.getColumnIndex(DownloadManager.COLUMN_REASON)));
-                            Message message = new Message();
-                            Bundle data = new Bundle();
-                            data.putString(ERROR, "RECEIVED STATUS FAILED");
-                            message.setData(data);
-                            handler.sendMessage(message);
-                        } else if (status == DownloadManager.STATUS_PAUSED) { //failed, but may be retryied on device restart
-                            Log.d(TAG, "OTA UPDATE PAUSED. REASON IS (CHECK AGAINST PAUSED_ CONSTANTS OF DownloadManager: " + c.getInt(c.getColumnIndex(DownloadManager.COLUMN_REASON)));
-                        }
-
-                        //CLOSE CURSOR
-                        c.close();
-                        //WAIT FOR 1/4 SECOND FOR ANOTHER ITERATION
-                        try {
-                            Thread.sleep(250);
-                        } catch (InterruptedException e) {
-                            e.printStackTrace();
-                        }
-                    } else {
-                        long duration = System.currentTimeMillis() - downloadStart;
-                        if (!hasStatus && duration > MAX_WAIT_FOR_DOWNLOAD_START) {
-                            //NOTE: If no status could be obtained from download manager for 5s after starting
-                            // the download something is bad and we will throw error.
-                            downloading = false;
-                            Log.d(TAG, "OTA UPDATE FAILURE: DOWNLOAD DID NOT START AFTER 5000ms");
-                            Message message = new Message();
-                            Bundle data = new Bundle();
-                            data.putString(ERROR, "DOWNLOAD DID NOT START AFTER 5000ms");
-                            message.setData(data);
-                            handler.sendMessage(message);
-                        }
-                    }
-                }
-            }
-        }).start();
-    }
-
-    /**
      * Report error to the dart code
      *
      * @param otaStatus Status to report
      * @param s         Error message to report
      */
-    private void reportError(OtaStatus otaStatus, String s) {
-        if (progressSink != null) {
-            progressSink.error("" + otaStatus.ordinal(), s, null);
-            progressSink = null;
+    private void reportError(final OtaStatus otaStatus, final String s, final Exception e) {
+        if (Looper.getMainLooper().isCurrentThread()) {
+            Log.e(TAG, "ERROR: " + s, e);
+            if (progressSink != null) {
+                progressSink.error("" + otaStatus.ordinal(), s, null);
+                progressSink = null;
+            }
+        } else {
+            //REPORT ERROR ON UI THREAD
+            handler.post(new Runnable() {
+                @Override
+                public void run() {
+                    reportError(otaStatus, s, e);
+                }
+            });
         }
     }
 
@@ -441,7 +376,7 @@ public class OtaUpdatePlugin implements FlutterPlugin, ActivityAware, EventChann
                 if (progressSink != null) {
                     Bundle data = msg.getData();
                     if (data.containsKey(ERROR)) {
-                        reportError(OtaStatus.DOWNLOAD_ERROR, data.getString(ERROR));
+                        reportError(OtaStatus.DOWNLOAD_ERROR, data.getString(ERROR), null);
                     } else {
                         long bytesDownloaded = data.getLong(BYTES_DOWNLOADED);
                         long bytesTotal = data.getLong(BYTES_TOTAL);
@@ -452,6 +387,42 @@ public class OtaUpdatePlugin implements FlutterPlugin, ActivityAware, EventChann
         };
         final EventChannel progressChannel = new EventChannel(messanger, "sk.fourq.ota_update");
         progressChannel.setStreamHandler(this);
+
+        client = new OkHttpClient.Builder()
+                .addNetworkInterceptor(new Interceptor() {
+                    @NotNull
+                    @Override
+                    public Response intercept(@NotNull Chain chain) throws IOException {
+                        Response originalResponse = chain.proceed(chain.request());
+                        return originalResponse.newBuilder()
+                                .body(new ProgressResponseBody(originalResponse.body(), OtaUpdatePlugin.this))
+                                .build();
+                    }
+                })
+                .build();
+
+        notifiactionManager = (NotificationManager) context.getSystemService(Context.NOTIFICATION_SERVICE);
+    }
+
+    @Override
+    public void onDownloadProgress(long bytesRead, long contentLength, boolean done) {
+
+        if (done) {
+            Log.d(TAG, "Download is complete");
+        } else {
+            if (contentLength < 1) {
+                Log.d(TAG, "Content-length header is missing. Cannot compute progress.");
+            } else {
+                if (progressSink != null) {
+                    Message message = new Message();
+                    Bundle data = new Bundle();
+                    data.putLong(BYTES_DOWNLOADED, bytesRead);
+                    data.putLong(BYTES_TOTAL, contentLength);
+                    message.setData(data);
+                    handler.sendMessage(message);
+                }
+            }
+        }
     }
 
     /**

@@ -37,5 +37,5 @@ dependencies {
     implementation 'androidx.legacy:legacy-support-v4:1.0.0'
     // https://mvnrepository.com/artifact/commons-codec/commons-codec
     implementation group: 'commons-codec', name: 'commons-codec', version: '1.14'
-
+    implementation 'com.squareup.okhttp3:okhttp:4.9.2'
 }

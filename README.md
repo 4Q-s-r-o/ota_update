@@ -6,6 +6,23 @@ Flutter plugin implementing OTA update.\
 On Android it downloads the file (with progress reporting) and triggers app installation intent.\
 On iOS it opens safari with specified ipa url. (not yet functioning)
 
+##Migrating to 4.0.0+
+This update solves many problems arising from using android download manager and saving to external downloads folder.
+
+Important changes:
+* Files are no longer downloaded using DownloadManager
+  * Because we are not using download manager there is no default system notification about progress. Hovewer since update events are published to flutter code, you can implement notification yourself if needed. 
+* Files are saved in internal directory which eliminates need to use SAF and prevents from multiple applications that uses this package to potentially overwrite apk
+
+After upgrading version number, you need to replace contents of the file ```android/src/main/res/xml/filepaths.xml``` with following contents.
+```xml
+<?xml version="1.0" encoding="utf-8"?>
+<paths xmlns:android="http://schemas.android.com/apk/res/android">
+    <files-path name="internal_apk_storage" path="ota_update/"/>
+</paths>
+```
+
+
 ## Usage
 
 To use this plugin, add `ota_update` as a [dependency in your `pubspec.yaml` file](https://flutter.io/platform-plugins/).
@@ -57,7 +74,7 @@ This will allow plugin to access the downloads folder to start the update.
 ```xml
 <?xml version="1.0" encoding="utf-8"?>
 <paths xmlns:android="http://schemas.android.com/apk/res/android">
-    <external-path name="external_download" path="Download"/>
+<files-path name="internal_apk_storage" path="ota_update/"/>
 </paths>
 ```
 
