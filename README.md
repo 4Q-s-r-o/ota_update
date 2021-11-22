@@ -6,7 +6,7 @@ Flutter plugin implementing OTA update.\
 On Android it downloads the file (with progress reporting) and triggers app installation intent.\
 On iOS it opens safari with specified ipa url. (not yet functioning)
 
-##Migrating to 4.0.0+
+## Migrating to 4.0.0+
 This update solves many problems arising from using android download manager and saving to external downloads folder.
 
 Important changes:
