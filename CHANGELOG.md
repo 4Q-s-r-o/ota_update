@@ -1,3 +1,8 @@
+#4.0.0
+* Replaced android download manager with OkHttp
+* Minor code refactoring
+* APKs are no long saved in downloads folder but in internal app storage. This prevents weird permission errors.
+* See README.md for details about upgrade.
 #3.1.1
 * Gradle upgrade
 # 3.1.0
