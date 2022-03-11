@@ -54,6 +54,13 @@ import 'package:ota_update/ota_update.dart';
   }
 ```
 ### Android
+Add permissions to AndroidManifest.xml.
+
+```xml
+<uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE"/>
+<uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES"/>
+```
+
 Add following provider referrence to AndroidManifest.xml inside ```<application>``` node.
 ```xml
 <provider
