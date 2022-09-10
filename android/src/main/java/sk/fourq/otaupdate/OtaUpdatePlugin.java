@@ -140,12 +140,12 @@ public class OtaUpdatePlugin implements FlutterPlugin, ActivityAware, EventChann
         } catch (JSONException e) {
             Log.e(TAG, "ERROR: " + e.getMessage(), e);
         }
-        if (argumentsMap.containsKey(ARG_FILENAME) && argumentsMap.get(ARG_FILENAME) != null) {
+        if (argumentsMap.containsKey(ARG_FILENAME)) {
             filename = argumentsMap.get(ARG_FILENAME).toString();
         } else {
             filename = DEFAULT_APK_NAME;
         }
-        if (argumentsMap.containsKey(ARG_CHECKSUM) && argumentsMap.get(ARG_CHECKSUM) != null) {
+        if (argumentsMap.containsKey(ARG_CHECKSUM)) {
             checksum = argumentsMap.get(ARG_CHECKSUM).toString();
         }
         // user-provided provider authority
