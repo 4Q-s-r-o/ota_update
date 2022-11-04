@@ -236,9 +236,14 @@ public class OtaUpdatePlugin implements FlutterPlugin, ActivityAware, EventChann
                     if (!response.isSuccessful()) {
                         reportError(OtaStatus.DOWNLOAD_ERROR, "Http request finished with status " + response.code(), null);
                     }
-                    BufferedSink sink = Okio.buffer(Okio.sink(file));
-                    sink.writeAll(response.body().source());
-                    sink.close();
+                    try {
+                        BufferedSink sink = Okio.buffer(Okio.sink(file));
+                        sink.writeAll(response.body().source());
+                        sink.close();
+                    } catch (RuntimeException ex){
+                        reportError(OtaStatus.DOWNLOAD_ERROR, ex.getMessage(), ex);
+                        return;
+                    }
                     onDownloadComplete(destination, fileUri);
                 }
             });
