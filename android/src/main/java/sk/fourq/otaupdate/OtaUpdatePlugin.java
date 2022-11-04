@@ -207,7 +207,7 @@ public class OtaUpdatePlugin implements FlutterPlugin, ActivityAware, EventChann
                 if (!file.delete()) {
                     Log.e(TAG, "WARNING: unable to delete old apk file before starting OTA");
                 }
-            } else {
+            } else if (!file.getParentFile().exists()){
                 if (!file.getParentFile().mkdirs()) {
                     reportError(OtaStatus.INTERNAL_ERROR, "unable to create ota_update folder in internal storage", null);
                 }
