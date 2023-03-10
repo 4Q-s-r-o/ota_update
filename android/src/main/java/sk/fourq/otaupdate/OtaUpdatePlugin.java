@@ -156,7 +156,12 @@ public class OtaUpdatePlugin implements FlutterPlugin, ActivityAware, EventChann
             androidProviderAuthority = context.getPackageName() + "." + "ota_update_provider";
         }
 
-        if (PackageManager.PERMISSION_GRANTED == ContextCompat.checkSelfPermission(context, Manifest.permission.WRITE_EXTERNAL_STORAGE)) {
+        int SKIP_WRITE_EXTERNAL_STORAGE_SDK_INT = 33;
+
+        // WRITE_EXTERNAL_STORAGE permission always returns false on sdk 33
+        boolean skipWriteExternalStorage = android.os.Build.VERSION.SDK_INT >= SKIP_WRITE_EXTERNAL_STORAGE_SDK_INT;
+
+        if (skipWriteExternalStorage || PackageManager.PERMISSION_GRANTED == ContextCompat.checkSelfPermission(context, Manifest.permission.WRITE_EXTERNAL_STORAGE)) {
             executeDownload();
         } else {
             String[] permissions = {
