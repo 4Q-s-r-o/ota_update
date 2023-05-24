@@ -1,3 +1,5 @@
+# 5.0.0
+* Removed legacy support for android flutter v1 embedding
 # 4.0.3
 * Fixed permission error on Android 13 (TechGeekD)
 # 4.0.2

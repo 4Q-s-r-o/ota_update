@@ -6,6 +6,9 @@ Flutter plugin implementing OTA update.\
 On Android it downloads the file (with progress reporting) and triggers app installation intent.\
 On iOS it opens safari with specified ipa url. (not yet functioning)
 
+## Migrating to 5.0.0+
+This update removes legacy support for flutter android embedding v1. No one should be affected now. In a rare event you are still using old ombedding, plese consider upgrading to v2.
+
 ## Migrating to 4.0.0+
 This update solves many problems arising from using android download manager and saving to external downloads folder.
 
@@ -103,7 +106,20 @@ and reference it in `AndroidManifest.xml` in application tag
 android:networkSecurityConfig="@xml/network_security_config"
 ```
 
-#### Note
+#### Typical workflow
+Since this plugin only handles download and instalation, there are still a few steps out of our scope that needs to be done. This is mainly to allow different implementation scenarios. 
+
+1. Update hosting. You need to hava server that provides you with installation file.
+2. Checking for update. You need to have a way to check if the update is available.
+3. Authentication. If your update server requires login you may need to obtain authorization token (or anything else you are using for auth) before downloading APK.
+4. Download and installation of APK. This is the part that is provided for you by plugin.
+
+
+#### Using sha256checksum
+This package supports sha256 checksum verification of the file integrity. This allows as to detect if file has been corrupted durring transfer.
+To use this feature, your update server should provide you with sha256 checksum of APK and you need to obtain this value while you are checking for update. When you run ```execute``` method with this parameter, plugin will compute sha256 value from downloaded file and compare with provided value. The update will continiue only if the two values match, otherwise it throws error.
+
+#### Notes
 * Google Play Protect may in some cases cause problems with installation.
 
 ## Statuses

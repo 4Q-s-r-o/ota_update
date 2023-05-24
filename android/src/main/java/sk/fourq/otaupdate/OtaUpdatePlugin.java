@@ -73,19 +73,6 @@ public class OtaUpdatePlugin implements FlutterPlugin, ActivityAware, EventChann
     private String filename;
     private String checksum;
 
-    /**
-     * Legacy plugin initialization for embedding v1. This method provides backwards compatibility.
-     *
-     * @param registrar v1 embedding registration
-     */
-    public static void registerWith(io.flutter.plugin.common.PluginRegistry.Registrar registrar) {
-        Log.d(TAG, "registerWith");
-        OtaUpdatePlugin plugin = new OtaUpdatePlugin();
-        plugin.initialize(registrar.context(), registrar.messenger());
-        plugin.activity = registrar.activity();
-        registrar.addRequestPermissionsResultListener(plugin);
-    }
-
     //FLUTTER EMBEDDING V2 - PLUGIN BINDING
     @Override
     public void onAttachedToEngine(FlutterPluginBinding binding) {
