@@ -119,6 +119,9 @@ Since this plugin only handles download and instalation, there are still a few s
 This package supports sha256 checksum verification of the file integrity. This allows as to detect if file has been corrupted durring transfer.
 To use this feature, your update server should provide you with sha256 checksum of APK and you need to obtain this value while you are checking for update. When you run ```execute``` method with this parameter, plugin will compute sha256 value from downloaded file and compare with provided value. The update will continiue only if the two values match, otherwise it throws error.
 
+#### Using split apks (experimental)
+Plugin now allows you to get android ABI platform. If your are building multiple apks per abi (using flutter param --split-per-abi), you can now utilize smaller APKs. You can get system architecture and choose to download smaller APK
+
 #### Notes
 * Google Play Protect may in some cases cause problems with installation.
 

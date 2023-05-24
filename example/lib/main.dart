@@ -22,6 +22,7 @@ class _MyAppState extends State<MyApp> {
 
   Future<void> tryOtaUpdate() async {
     try {
+      print('ABI Platform: ${await OtaUpdate().getAbi()}');
       //LINK CONTAINS APK OF FLUTTER HELLO WORLD FROM FLUTTER SDK EXAMPLES
       OtaUpdate()
           .execute(

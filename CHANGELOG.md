@@ -1,3 +1,5 @@
+# 5.1.0
+* Added new method call ```getAbi``` to simplify for checking for ABI platform in case of using split apks
 # 5.0.0
 * Removed legacy support for android flutter v1 embedding
 # 4.0.3

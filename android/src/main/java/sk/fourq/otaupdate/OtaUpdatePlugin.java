@@ -22,6 +22,10 @@ import io.flutter.embedding.engine.plugins.activity.ActivityPluginBinding;
 import io.flutter.plugin.common.BinaryMessenger;
 import io.flutter.plugin.common.EventChannel;
 import io.flutter.plugin.common.PluginRegistry;
+import io.flutter.plugin.common.MethodCall;
+import io.flutter.plugin.common.MethodChannel;
+import io.flutter.plugin.common.MethodChannel.MethodCallHandler;
+import io.flutter.plugin.common.MethodChannel.Result;
 import okhttp3.Call;
 import okhttp3.Callback;
 import okhttp3.Interceptor;
@@ -44,7 +48,7 @@ import java.util.Map;
  * OtaUpdatePlugin
  */
 @TargetApi(Build.VERSION_CODES.M)
-public class OtaUpdatePlugin implements FlutterPlugin, ActivityAware, EventChannel.StreamHandler, PluginRegistry.RequestPermissionsResultListener, ProgressListener {
+public class OtaUpdatePlugin implements FlutterPlugin, ActivityAware, EventChannel.StreamHandler, MethodCallHandler, PluginRegistry.RequestPermissionsResultListener, ProgressListener {
 
     //CONSTANTS
     private static final String BYTES_DOWNLOADED = "BYTES_DOWNLOADED";
@@ -57,6 +61,8 @@ public class OtaUpdatePlugin implements FlutterPlugin, ActivityAware, EventChann
     private static final String ARG_ANDROID_PROVIDER_AUTHORITY = "androidProviderAuthority";
     private static final String TAG = "FLUTTER OTA";
     private static final String DEFAULT_APK_NAME = "ota_update.apk";
+    private static final String STREAM_CHANNEL = "sk.fourq.ota_update/stream";
+    private static final String METHOD_CHANNEL = "sk.fourq.ota_update/method";
 
     //BASIC PLUGIN STATE
     private Context context;
@@ -106,6 +112,17 @@ public class OtaUpdatePlugin implements FlutterPlugin, ActivityAware, EventChann
     @Override
     public void onDetachedFromActivity() {
         Log.d(TAG, "onDetachedFromActivity");
+    }
+
+    //METHOD LISTENER
+    @Override
+    public void onMethodCall(MethodCall call, Result result) {
+        Log.d(TAG, "onMethodCall "+call.method);
+        if (call.method.equals("getAbi")) {
+            result.success(Build.SUPPORTED_ABIS[0]);
+        } else {
+            result.notImplemented();
+        }
     }
 
     //STREAM LISTENER
@@ -199,7 +216,7 @@ public class OtaUpdatePlugin implements FlutterPlugin, ActivityAware, EventChann
                 if (!file.delete()) {
                     Log.e(TAG, "WARNING: unable to delete old apk file before starting OTA");
                 }
-            } else if (!file.getParentFile().exists()){
+            } else if (!file.getParentFile().exists()) {
                 if (!file.getParentFile().mkdirs()) {
                     reportError(OtaStatus.INTERNAL_ERROR, "unable to create ota_update folder in internal storage", null);
                 }
@@ -232,7 +249,7 @@ public class OtaUpdatePlugin implements FlutterPlugin, ActivityAware, EventChann
                         BufferedSink sink = Okio.buffer(Okio.sink(file));
                         sink.writeAll(response.body().source());
                         sink.close();
-                    } catch (RuntimeException ex){
+                    } catch (RuntimeException ex) {
                         reportError(OtaStatus.DOWNLOAD_ERROR, ex.getMessage(), ex);
                         return;
                     }
@@ -370,8 +387,11 @@ public class OtaUpdatePlugin implements FlutterPlugin, ActivityAware, EventChann
                 }
             }
         };
-        final EventChannel progressChannel = new EventChannel(messanger, "sk.fourq.ota_update");
+        final EventChannel progressChannel = new EventChannel(messanger, STREAM_CHANNEL);
         progressChannel.setStreamHandler(this);
+
+        final MethodChannel methodChannel = new MethodChannel(messanger, METHOD_CHANNEL);
+        methodChannel.setMethodCallHandler(this);
 
         client = new OkHttpClient.Builder()
                 .addNetworkInterceptor(new Interceptor() {
