@@ -12,7 +12,7 @@ class MyApp extends StatefulWidget {
 }
 
 class _MyAppState extends State<MyApp> {
-  OtaEvent currentEvent;
+  OtaEvent? currentEvent;
 
   @override
   void initState() {
@@ -53,7 +53,7 @@ class _MyAppState extends State<MyApp> {
           title: const Text('Plugin example app'),
         ),
         body: Center(
-          child: Text('OTA status: ${currentEvent.status} : ${currentEvent.value} \n'),
+          child: Text('OTA status: ${currentEvent?.status} : ${currentEvent?.value} \n'),
         ),
       ),
     );
