@@ -122,7 +122,7 @@ public class OtaUpdatePlugin implements FlutterPlugin, ActivityAware, EventChann
         Log.d(TAG, "onMethodCall "+call.method);
         if (call.method.equals("getAbi")) {
             result.success(Build.SUPPORTED_ABIS[0]);
-        } else if(call.method.equals("cancel")) {
+        } else if (call.method.equals("cancel")) {
             if (currentCall != null) {
                 currentCall.cancel();
                 currentCall = null;
