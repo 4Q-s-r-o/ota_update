@@ -26,6 +26,7 @@ import io.flutter.plugin.common.MethodCall;
 import io.flutter.plugin.common.MethodChannel;
 import io.flutter.plugin.common.MethodChannel.MethodCallHandler;
 import io.flutter.plugin.common.MethodChannel.Result;
+import okhttp3.internal.http2.StreamResetException;
 import okhttp3.Call;
 import okhttp3.Callback;
 import okhttp3.Interceptor;
@@ -74,6 +75,7 @@ public class OtaUpdatePlugin implements FlutterPlugin, ActivityAware, EventChann
     private OkHttpClient client;
 
     //DOWNLOAD SPECIFIC PLUGIN STATE. PLUGIN SUPPORT ONLY ONE DOWNLOAD AT A TIME
+    private Call currentCall;
     private String downloadUrl;
     private JSONObject headers;
     private String filename;
@@ -120,6 +122,13 @@ public class OtaUpdatePlugin implements FlutterPlugin, ActivityAware, EventChann
         Log.d(TAG, "onMethodCall "+call.method);
         if (call.method.equals("getAbi")) {
             result.success(Build.SUPPORTED_ABIS[0]);
+        } else if(call.method.equals("cancel")) {
+            if (currentCall != null) {
+                currentCall.cancel();
+                currentCall = null;
+                reportError(OtaStatus.CANCELED, "Call was canceled using cancel()", null);
+            }
+            result.success(null);
         } else {
             result.notImplemented();
         }
@@ -205,6 +214,11 @@ public class OtaUpdatePlugin implements FlutterPlugin, ActivityAware, EventChann
      */
     private void executeDownload() {
         try {
+            if (currentCall != null) {
+                reportError(OtaStatus.ALREADY_RUNNING_ERROR, "Another download (call) is already running", null);
+                return;
+            }
+
             String dataDir = context.getApplicationInfo().dataDir + "/files/ota_update";
             //PREPARE URLS
             final String destination = dataDir + "/" + filename;
@@ -234,10 +248,12 @@ public class OtaUpdatePlugin implements FlutterPlugin, ActivityAware, EventChann
                 }
             }
 
-            client.newCall(request.build()).enqueue(new Callback() {
+            currentCall = client.newCall(request.build());
+            currentCall.enqueue(new Callback() {
                 @Override
                 public void onFailure(@NotNull Call call, @NotNull IOException e) {
                     reportError(OtaStatus.DOWNLOAD_ERROR, e.getMessage(), e);
+                    currentCall = null;
                 }
 
                 @Override
@@ -249,15 +265,22 @@ public class OtaUpdatePlugin implements FlutterPlugin, ActivityAware, EventChann
                         BufferedSink sink = Okio.buffer(Okio.sink(file));
                         sink.writeAll(response.body().source());
                         sink.close();
+                    } catch (StreamResetException ex) {
+                        // Thrown when the call was canceled using 'cancel()'
+                        currentCall = null;
+                        return;
                     } catch (RuntimeException ex) {
                         reportError(OtaStatus.DOWNLOAD_ERROR, ex.getMessage(), ex);
+                        currentCall = null;
                         return;
                     }
                     onDownloadComplete(destination, fileUri);
+                    currentCall = null;
                 }
             });
         } catch (Exception e) {
             reportError(OtaStatus.INTERNAL_ERROR, e.getMessage(), e);
+            currentCall = null;
         }
     }
 
@@ -439,5 +462,6 @@ public class OtaUpdatePlugin implements FlutterPlugin, ActivityAware, EventChann
         INTERNAL_ERROR,
         DOWNLOAD_ERROR,
         CHECKSUM_ERROR,
+        CANCELED
     }
 }

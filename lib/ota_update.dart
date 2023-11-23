@@ -17,6 +17,11 @@ class OtaUpdate {
     return _methodChannel.invokeMethod<String>('getAbi');
   }
 
+  /// Cancel the currently active ota download if there is one
+  Future<void> cancel() async {
+    return _methodChannel.invokeMethod<void>('cancel');
+  }
+
   /// Execute download and instalation of the plugin.
   /// Download progress and all success or error states are publish in stream as OtaEvent
   Stream<OtaEvent> execute(
@@ -95,7 +100,10 @@ enum OtaStatus {
   /// CHECKSUM VERIFICATION FAILED. MOSTLY THIS IS DUE INCORRECT OR CORRUPTED FILE
   /// THIS IS ALSO RETURNED IF PLUGIN WAS UNABLE TO CALCULATE SHA 256 HASH OF DOWNLOADED FILE
   /// SEE VALUE FOR MORE INFORMATION
-  CHECKSUM_ERROR
+  CHECKSUM_ERROR,
+
+  /// DOWNLOAD WAS CANCELED
+  CANCELED
 }
 
 /// EXCEPTION FOR QUICK IDENTIFICATION OF ERRORS THROWN FROM THIS PLUGIN.
