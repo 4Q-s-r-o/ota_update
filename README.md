@@ -146,6 +146,8 @@ Plugin now allows you to get android ABI platform. If your are building multiple
 * INTERNAL_ERROR: 
     * sent in all other error cases
     * event value is underlying error message
+* CANCELED:
+  * sent when the download was canceled using 'OtaUpdate().cancel()'
 
 ## TODO
 * restrict download to specific connection type (mobile, wifi)
