@@ -1,3 +1,6 @@
+# 6.0.0
+* Migration to flutter 3.16 and graddle wrapper 8.0+ (evgfilim1)
+* Ability to cancel ongoing download (JustSayBien)
 # 5.1.0
 * Added new method call ```getAbi``` to simplify for checking for ABI platform in case of using split apks
 # 5.0.0
