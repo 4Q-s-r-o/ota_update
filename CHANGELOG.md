@@ -1,3 +1,5 @@
+# 7.0.0
+* Migration to flutter 3.29
 # 6.0.0
 * Migration to flutter 3.16 and graddle wrapper 8.0+ (evgfilim1)
 * Ability to cancel ongoing download (JustSayBien)

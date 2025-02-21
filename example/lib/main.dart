@@ -29,7 +29,7 @@ class _MyAppState extends State<MyApp> {
         'https://internal1.4q.sk/flutter_hello_world.apk',
         destinationFilename: 'flutter_hello_world.apk',
         //FOR NOW ANDROID ONLY - ABILITY TO VALIDATE CHECKSUM OF FILE:
-        sha256checksum: 'd6da28451a1e15cf7a75f2c3f151befad3b80ad0bb232ab15c20897e54f21478',
+        sha256checksum: '28cff8632531859634c4142ec704e86c5345244bddd6433b6160edaabc9b646a',
       )
           .listen(
         (OtaEvent event) {
