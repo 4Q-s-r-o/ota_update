@@ -1,3 +1,5 @@
+# 7.0.2
+* Migration to flutter 3.32
 # 7.0.1
 * Removed requesting external storage permissions as ota_update no longer requires this permission. Instead it uses internal storage 
 # 7.0.0

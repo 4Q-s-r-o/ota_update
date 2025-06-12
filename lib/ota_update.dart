@@ -36,25 +36,26 @@ class OtaUpdate {
     }
     final StreamController<OtaEvent> controller = StreamController<OtaEvent>.broadcast();
     if (_progressStream == null) {
-      _progressChannel.receiveBroadcastStream(
-        <dynamic, dynamic>{
-          'url': url,
-          'androidProviderAuthority': androidProviderAuthority,
-          'filename': destinationFilename,
-          'checksum': sha256checksum,
-          'headers': jsonEncode(headers)
-        },
-      ).listen((dynamic event) {
-        final OtaEvent otaEvent = _toOtaEvent(event.cast<String>());
-        controller.add(otaEvent);
-        if (otaEvent.status != OtaStatus.DOWNLOADING) {
-          controller.close();
-        }
-      }).onError((Object error) {
-        if (error is PlatformException) {
-          controller.add(_toOtaEvent(<String?>[error.code, error.message]));
-        }
-      });
+      _progressChannel
+          .receiveBroadcastStream(<dynamic, dynamic>{
+            'url': url,
+            'androidProviderAuthority': androidProviderAuthority,
+            'filename': destinationFilename,
+            'checksum': sha256checksum,
+            'headers': jsonEncode(headers),
+          })
+          .listen((dynamic event) {
+            final OtaEvent otaEvent = _toOtaEvent(event.cast<String>());
+            controller.add(otaEvent);
+            if (otaEvent.status != OtaStatus.DOWNLOADING) {
+              controller.close();
+            }
+          })
+          .onError((Object error) {
+            if (error is PlatformException) {
+              controller.add(_toOtaEvent(<String?>[error.code, error.message]));
+            }
+          });
       _progressStream = controller.stream;
     }
     return _progressStream!;
@@ -103,7 +104,7 @@ enum OtaStatus {
   CHECKSUM_ERROR,
 
   /// DOWNLOAD WAS CANCELED
-  CANCELED
+  CANCELED,
 }
 
 /// EXCEPTION FOR QUICK IDENTIFICATION OF ERRORS THROWN FROM THIS PLUGIN.
