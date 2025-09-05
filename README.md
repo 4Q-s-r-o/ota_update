@@ -5,6 +5,36 @@
 Flutter plugin implementing OTA update.\
 On Android it downloads the file (with progress reporting) and triggers app installation intent.\
 On iOS it opens safari with specified ipa url. (not yet functioning)
+## Migrating to 7.0.0+
+As we plan to use more modern java features across all our plugins, we opted for desugaring of java features. As a result,
+you need to enable desugaring. More and more packages is already requiring this, so there is a good chance you have it enabled already.
+
+If not, it is fairly simple [to do so](https://stackoverflow.com/questions/79158012/dependency-flutter-local-notifications-requires-core-library-desugaring-to-be). In you ```android/app/build.gradle```
+```
+android {
+    defaultConfig {
+        // Required when setting minSdkVersion to 20 or lower
+        multiDexEnabled true
+    }
+
+    compileOptions {
+        // Flag to enable support for the new language APIs
+        coreLibraryDesugaringEnabled true
+        // Sets Java compatibility to Java 8
+        sourceCompatibility JavaVersion.VERSION_1_8
+        targetCompatibility JavaVersion.VERSION_1_8
+    }
+}
+
+dependencies {
+    // For AGP 7.4+
+    coreLibraryDesugaring 'com.android.tools:desugar_jdk_libs:2.0.3'
+    // For AGP 7.3
+    // coreLibraryDesugaring 'com.android.tools:desugar_jdk_libs:1.2.3'
+    // For AGP 4.0 to 7.2
+    // coreLibraryDesugaring 'com.android.tools:desugar_jdk_libs:1.1.9'
+}
+```
 
 ## Migrating to 5.0.0+
 This update removes legacy support for flutter android embedding v1. No one should be affected now. In a rare event you are still using old ombedding, plese consider upgrading to v2.
