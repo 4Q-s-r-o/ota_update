@@ -94,6 +94,21 @@ Add permissions to AndroidManifest.xml.
 <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES"/>
 ```
 
+#### Silent Installation (System Apps Only)
+This plugin automatically supports silent installation for system apps without user interaction. The plugin includes the `INSTALL_PACKAGES` permission which enables this feature.
+
+**How it works:**
+- **Regular apps** (Play Store, sideloaded): Shows standard installation prompt to user ✓
+- **System apps** (pre-installed in `/system/` or signed with platform certificate): Installs silently without user interaction ✓
+
+**No extra configuration needed!** The plugin automatically detects if your app is a system app and uses the appropriate installation method. For regular apps, the `INSTALL_PACKAGES` permission is harmlessly ignored by Android and the normal installation flow is used.
+
+This is particularly useful for:
+- IoT devices
+- Kiosk applications
+- Enterprise/MDM deployments
+- Custom Android ROM distributions
+
 Add following provider referrence to AndroidManifest.xml inside ```<application>``` node.
 ```xml
 <provider
@@ -154,6 +169,7 @@ Plugin now allows you to get android ABI platform. If your are building multiple
 
 #### Notes
 * Google Play Protect may in some cases cause problems with installation.
+* For system apps, the plugin supports silent installation without user interaction. Regular apps will continue to show the standard installation prompt.
 
 ## Statuses
 * DOWNLOADING: 

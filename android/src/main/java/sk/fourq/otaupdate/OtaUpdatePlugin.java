@@ -3,8 +3,10 @@ package sk.fourq.otaupdate;
 import android.Manifest;
 import android.annotation.TargetApi;
 import android.app.Activity;
+import android.app.PendingIntent;
 import android.content.Context;
 import android.content.Intent;
+import android.content.pm.PackageInstaller;
 import android.content.pm.PackageManager;
 import android.net.Uri;
 import android.os.Build;
@@ -40,7 +42,10 @@ import org.json.JSONException;
 import org.json.JSONObject;
 
 import java.io.File;
+import java.io.FileInputStream;
+import java.io.InputStream;
 import java.io.IOException;
+import java.io.OutputStream;
 import java.util.Arrays;
 import java.util.Iterator;
 import java.util.Map;
@@ -314,9 +319,72 @@ public class OtaUpdatePlugin implements FlutterPlugin, ActivityAware, EventChann
         );
     }
 
+/**
+     * Check if app has INSTALL_PACKAGES permission (system app privilege)
+     */
+    private boolean hasInstallPackagesPermission() {
+        try {
+            return context.checkCallingOrSelfPermission("android.permission.INSTALL_PACKAGES") 
+                    == PackageManager.PERMISSION_GRANTED;
+        } catch (Exception e) {
+            Log.w(TAG, "Error checking INSTALL_PACKAGES permission", e);
+            return false;
+        }
+    }
+
+    /**
+     * Perform silent installation using PackageInstaller (for system apps)
+     */
+    private void executeSilentInstallation(File downloadedFile) {
+        try {
+            Log.d(TAG, "Attempting silent installation for system app");
+            
+            PackageInstaller packageInstaller = context.getPackageManager().getPackageInstaller();
+            PackageInstaller.SessionParams params = new PackageInstaller.SessionParams(
+                    PackageInstaller.SessionParams.MODE_FULL_INSTALL);
+            
+            int sessionId = packageInstaller.createSession(params);
+            PackageInstaller.Session session = packageInstaller.openSession(sessionId);
+            
+            try (OutputStream out = session.openWrite("package", 0, -1);
+                 InputStream in = new FileInputStream(downloadedFile)) {
+                byte[] buffer = new byte[65536];
+                int c;
+                while ((c = in.read(buffer)) != -1) {
+                    out.write(buffer, 0, c);
+                }
+                session.fsync(out);
+            }
+            
+            // Create an intent for the installation result
+            Intent intent = new Intent(context, OtaUpdatePlugin.class);
+            PendingIntent pendingIntent = PendingIntent.getBroadcast(
+                    context,
+                    sessionId,
+                    intent,
+                    Build.VERSION.SDK_INT >= Build.VERSION_CODES.S 
+                        ? PendingIntent.FLAG_MUTABLE 
+                        : PendingIntent.FLAG_UPDATE_CURRENT);
+            
+            session.commit(pendingIntent.getIntentSender());
+            session.close();
+            
+            Log.d(TAG, "Silent installation session committed");
+            
+            if (progressSink != null) {
+                progressSink.success(Arrays.asList("" + OtaStatus.INSTALLING.ordinal(), ""));
+                progressSink.endOfStream();
+                progressSink = null;
+            }
+        } catch (Exception e) {
+            Log.e(TAG, "Silent installation failed", e);
+            reportError(OtaStatus.INTERNAL_ERROR, "Silent installation failed: " + e.getMessage(), e);
+        }
+    }
     /**
      * Execute installation
      *
+     * If app has INSTALL_PACKAGES permission, use silent installation
      * For android API level >= 24 start intent for ACTION_INSTALL_PACKAGE (native installer)
      * For android API level < 24 start intent ACTION_VIEW (open file, android should prompt for installation)
      *
@@ -324,6 +392,12 @@ public class OtaUpdatePlugin implements FlutterPlugin, ActivityAware, EventChann
      * @param downloadedFile Downloaded file
      */
     private void executeInstallation(Uri fileUri, File downloadedFile) {
+       // Try silent installation for system apps first
+        if (hasInstallPackagesPermission()) {
+            Log.d(TAG, "System app detected, using silent installation");
+            executeSilentInstallation(downloadedFile);
+            return;
+        }
         Intent intent;
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
             //AUTHORITY NEEDS TO BE THE SAME ALSO IN MANIFEST
