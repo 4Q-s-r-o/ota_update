@@ -15,6 +15,7 @@ import android.os.Handler;
 import android.os.Looper;
 import android.os.Message;
 import android.util.Log;
+import androidx.annotation.RequiresApi;
 import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
 import androidx.core.content.FileProvider;
@@ -49,11 +50,12 @@ import java.io.OutputStream;
 import java.util.Arrays;
 import java.util.Iterator;
 import java.util.Map;
+import java.util.Objects;
 
 /**
  * OtaUpdatePlugin
  */
-@TargetApi(Build.VERSION_CODES.M)
+@RequiresApi(Build.VERSION_CODES.M)
 public class OtaUpdatePlugin implements FlutterPlugin, ActivityAware, EventChannel.StreamHandler, MethodCallHandler, PluginRegistry.RequestPermissionsResultListener, ProgressListener {
 
     //CONSTANTS
@@ -124,7 +126,7 @@ public class OtaUpdatePlugin implements FlutterPlugin, ActivityAware, EventChann
     //METHOD LISTENER
     @Override
     public void onMethodCall(MethodCall call, Result result) {
-        Log.d(TAG, "onMethodCall "+call.method);
+        Log.d(TAG, "onMethodCall " + call.method);
         if (call.method.equals("getAbi")) {
             result.success(Build.SUPPORTED_ABIS[0]);
         } else if (call.method.equals("cancel")) {
@@ -148,31 +150,28 @@ public class OtaUpdatePlugin implements FlutterPlugin, ActivityAware, EventChann
         Log.d(TAG, "STREAM OPENED");
         progressSink = events;
         //READ ARGUMENTS FROM CALL
-        Map argumentsMap = ((Map) arguments);
-        downloadUrl = argumentsMap.get(ARG_URL).toString();
+        //noinspection unchecked
+        Map<String, String> argumentsMap = ((Map<String, String>) arguments);
+        downloadUrl = argumentsMap.get(ARG_URL);
         try {
-            String headersJson = argumentsMap.get(ARG_HEADERS).toString();
-            if (!headersJson.isEmpty()) {
+            String headersJson = argumentsMap.get(ARG_HEADERS);
+            if (headersJson != null && !headersJson.isEmpty()) {
                 headers = new JSONObject(headersJson);
             }
         } catch (JSONException e) {
             Log.e(TAG, "ERROR: " + e.getMessage(), e);
         }
         if (argumentsMap.containsKey(ARG_FILENAME) && argumentsMap.get(ARG_FILENAME) != null) {
-            filename = argumentsMap.get(ARG_FILENAME).toString();
+            filename = argumentsMap.get(ARG_FILENAME);
         } else {
             filename = DEFAULT_APK_NAME;
         }
         if (argumentsMap.containsKey(ARG_CHECKSUM) && argumentsMap.get(ARG_CHECKSUM) != null) {
-            checksum = argumentsMap.get(ARG_CHECKSUM).toString();
+            checksum = argumentsMap.get(ARG_CHECKSUM);
         }
         // user-provided provider authority
-        Object authority = ((Map) arguments).get(ARG_ANDROID_PROVIDER_AUTHORITY);
-        if (authority != null) {
-            androidProviderAuthority = authority.toString();
-        } else {
-            androidProviderAuthority = context.getPackageName() + "." + "ota_update_provider";
-        }
+        String authority = argumentsMap.get(ARG_ANDROID_PROVIDER_AUTHORITY);
+        androidProviderAuthority = Objects.requireNonNullElseGet(authority, () -> context.getPackageName() + "." + "ota_update_provider");
         executeDownload();
     }
 
@@ -222,7 +221,7 @@ public class OtaUpdatePlugin implements FlutterPlugin, ActivityAware, EventChann
                 if (!file.delete()) {
                     Log.e(TAG, "WARNING: unable to delete old apk file before starting OTA");
                 }
-            } else if (!file.getParentFile().exists()) {
+            } else if (file.getParentFile() != null && !file.getParentFile().exists()) {
                 if (!file.getParentFile().mkdirs()) {
                     reportError(OtaStatus.INTERNAL_ERROR, "unable to create ota_update folder in internal storage", null);
                 }
@@ -255,7 +254,9 @@ public class OtaUpdatePlugin implements FlutterPlugin, ActivityAware, EventChann
                     }
                     try {
                         BufferedSink sink = Okio.buffer(Okio.sink(file));
-                        sink.writeAll(response.body().source());
+                        if (response.body() != null) {
+                            sink.writeAll(response.body().source());
+                        }
                         sink.close();
                     } catch (StreamResetException ex) {
                         // Thrown when the call was canceled using 'cancel()'
@@ -278,7 +279,7 @@ public class OtaUpdatePlugin implements FlutterPlugin, ActivityAware, EventChann
 
     /**
      * Download has been completed
-     *
+     * <p>
      * 1. Check if file exists
      * 2. If checksum was provided, compute downloaded file checksum and compare with provided value
      * 3. If checks above pass, trigger installation
@@ -293,9 +294,8 @@ public class OtaUpdatePlugin implements FlutterPlugin, ActivityAware, EventChann
             reportError(OtaStatus.DOWNLOAD_ERROR, "File was not downloaded", null);
             return;
         }
-
         if (checksum != null) {
-            //IF user provided checksum verify file integrity
+            //IF the user provided checksum verify file integrity
             try {
                 if (!Sha256ChecksumValidator.validateChecksum(checksum, downloadedFile)) {
                     //SEND CHECKSUM ERROR EVENT
@@ -309,23 +309,19 @@ public class OtaUpdatePlugin implements FlutterPlugin, ActivityAware, EventChann
             }
         }
         //TRIGGER APK INSTALLATION
-        handler.post(new Runnable() {
-                         @Override
-                         public void run() {
-                             executeInstallation(fileUri, downloadedFile);
-                         }
-                     }
-
+        handler.post(() -> executeInstallation(fileUri, downloadedFile)
         );
     }
 
-/**
+    /**
      * Check if app has INSTALL_PACKAGES permission (system app privilege)
      */
     private boolean hasInstallPackagesPermission() {
         try {
-            return context.checkCallingOrSelfPermission("android.permission.INSTALL_PACKAGES") 
+            boolean hasInstallPackages =  context.checkCallingOrSelfPermission("android.permission.INSTALL_PACKAGES")
                     == PackageManager.PERMISSION_GRANTED;
+            Log.d(TAG, "INSTALL_PACKAGES permission: " + hasInstallPackages);
+            return hasInstallPackages;
         } catch (Exception e) {
             Log.w(TAG, "Error checking INSTALL_PACKAGES permission", e);
             return false;
@@ -338,16 +334,20 @@ public class OtaUpdatePlugin implements FlutterPlugin, ActivityAware, EventChann
     private void executeSilentInstallation(File downloadedFile) {
         try {
             Log.d(TAG, "Attempting silent installation for system app");
-            
             PackageInstaller packageInstaller = context.getPackageManager().getPackageInstaller();
+            // Configure session parameters.
+            // MODE_FULL_INSTALL means we’re doing a full APK installation (not a staged/delta update).
             PackageInstaller.SessionParams params = new PackageInstaller.SessionParams(
-                    PackageInstaller.SessionParams.MODE_FULL_INSTALL);
-            
+                    PackageInstaller.SessionParams.MODE_FULL_INSTALL
+            );
+            // Create a new installation session and get its unique ID
+            // Open the session so we can write the APK bytes into it
             int sessionId = packageInstaller.createSession(params);
             PackageInstaller.Session session = packageInstaller.openSession(sessionId);
-            
             try (OutputStream out = session.openWrite("package", 0, -1);
-                 InputStream in = new FileInputStream(downloadedFile)) {
+                 InputStream in = new FileInputStream(downloadedFile)
+            ) {
+                // Buffer for copying data from the APK file into the session
                 byte[] buffer = new byte[65536];
                 int c;
                 while ((c = in.read(buffer)) != -1) {
@@ -355,22 +355,26 @@ public class OtaUpdatePlugin implements FlutterPlugin, ActivityAware, EventChann
                 }
                 session.fsync(out);
             }
-            
-            // Create an intent for the installation result
+
+            // Create intent for the installation result
             Intent intent = new Intent(context, OtaUpdatePlugin.class);
+            // Wrap the result Intent in a PendingIntent, which gives us an IntentSender for commit().
+            // On Android 12 (S) and above, PendingIntent must be declared mutable/immutable explicitly.
             PendingIntent pendingIntent = PendingIntent.getBroadcast(
                     context,
                     sessionId,
                     intent,
-                    Build.VERSION.SDK_INT >= Build.VERSION_CODES.S 
-                        ? PendingIntent.FLAG_MUTABLE 
-                        : PendingIntent.FLAG_UPDATE_CURRENT);
-            
+                    Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
+                            ? PendingIntent.FLAG_MUTABLE
+                            : PendingIntent.FLAG_UPDATE_CURRENT);
+
+            // Commit the session. This hands control over to the system to actually perform the install.
+            // The provided IntentSender will be invoked with the result of the installation.
             session.commit(pendingIntent.getIntentSender());
             session.close();
-            
+
             Log.d(TAG, "Silent installation session committed");
-            
+            // NOTIFY DART PART OF THE PLUGIN, THAT INSTALLATION HAS BEEN SUCCESSFUL
             if (progressSink != null) {
                 progressSink.success(Arrays.asList("" + OtaStatus.INSTALLING.ordinal(), ""));
                 progressSink.endOfStream();
@@ -381,9 +385,10 @@ public class OtaUpdatePlugin implements FlutterPlugin, ActivityAware, EventChann
             reportError(OtaStatus.INTERNAL_ERROR, "Silent installation failed: " + e.getMessage(), e);
         }
     }
+
     /**
      * Execute installation
-     *
+     * <p>
      * If app has INSTALL_PACKAGES permission, use silent installation
      * For android API level >= 24 start intent for ACTION_INSTALL_PACKAGE (native installer)
      * For android API level < 24 start intent ACTION_VIEW (open file, android should prompt for installation)
@@ -392,20 +397,23 @@ public class OtaUpdatePlugin implements FlutterPlugin, ActivityAware, EventChann
      * @param downloadedFile Downloaded file
      */
     private void executeInstallation(Uri fileUri, File downloadedFile) {
-       // Try silent installation for system apps first
+        // Try silent installation for system apps first
         if (hasInstallPackagesPermission()) {
             Log.d(TAG, "System app detected, using silent installation");
             executeSilentInstallation(downloadedFile);
             return;
         }
         Intent intent;
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-            //AUTHORITY NEEDS TO BE THE SAME ALSO IN MANIFEST
-            Uri apkUri = FileProvider.getUriForFile(context, androidProviderAuthority, downloadedFile);
-            intent = new Intent(Intent.ACTION_INSTALL_PACKAGE);
-            intent.setData(apkUri);
-            intent.setFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+       if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+           Log.d(TAG, "System app detected, using silent installation");
+           executeSilentInstallation(downloadedFile);
+//            //AUTHORITY NEEDS TO BE THE SAME ALSO IN MANIFEST
+//            Uri apkUri = FileProvider.getUriForFile(context, androidProviderAuthority, downloadedFile);
+//            intent = new Intent(Intent.ACTION_INSTALL_PACKAGE);
+//            intent.setData(apkUri);
+//            intent.setFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+//                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+           return;
         } else {
             intent = new Intent(Intent.ACTION_VIEW);
             intent.setDataAndType(fileUri, "application/vnd.android.package-archive");
