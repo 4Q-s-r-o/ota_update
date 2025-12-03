@@ -30,6 +30,7 @@ class OtaUpdate {
     String? androidProviderAuthority,
     String? destinationFilename,
     String? sha256checksum,
+    bool usePackageInstaller = false,
   }) {
     if (destinationFilename != null && destinationFilename.contains('/')) {
       throw OtaUpdateException('Invalid filename $destinationFilename');
@@ -43,19 +44,20 @@ class OtaUpdate {
             'filename': destinationFilename,
             'checksum': sha256checksum,
             'headers': jsonEncode(headers),
+            'usePackageInstaller': usePackageInstaller ? 'true' : 'false',
           })
           .listen((dynamic event) {
             final OtaEvent otaEvent = _toOtaEvent(event.cast<String>());
             controller.add(otaEvent);
-            if (otaEvent.status != OtaStatus.DOWNLOADING) {
-              controller.close();
-            }
           })
-          .onError((Object error) {
-            if (error is PlatformException) {
-              controller.add(_toOtaEvent(<String?>[error.code, error.message]));
-            }
-          });
+        ..onDone(() {
+          controller.close();
+        })
+        ..onError((Object error) {
+          if (error is PlatformException) {
+            controller.add(_toOtaEvent(<String?>[error.code, error.message]));
+          }
+        });
       _progressStream = controller.stream;
     }
     return _progressStream!;
@@ -86,8 +88,14 @@ enum OtaStatus {
   /// INSTALLATION HAS BEEN TRIGGERED
   INSTALLING,
 
+  /// INSTALLATION HAS BEEN SUCCESSFULY DONE
+  INSTALLATION_DONE,
+
   /// DOWNLOAD IS ALREADY RUNNING
   ALREADY_RUNNING_ERROR,
+
+  /// INSTALLATION WAS NOT SUCCESSFULL
+  INSTALLATION_ERROR,
 
   /// COULD NOT CONTINUE BECAUSE OF MISSING PERMISSIONS
   PERMISSION_NOT_GRANTED_ERROR,

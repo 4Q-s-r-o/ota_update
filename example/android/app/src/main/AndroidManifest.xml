@@ -42,5 +42,10 @@
                     android:name="android.support.FILE_PROVIDER_PATHS"
                     android:resource="@xml/filepaths" />
         </provider>
+        <receiver android:name="sk.fourq.otaupdate.InstallResultReceiver"  android:exported="false">
+            <intent-filter>
+                <action android:name="${applicationId}.ACTION_INSTALL_COMPLETE"/>
+            </intent-filter>
+        </receiver>
     </application>
 </manifest>
