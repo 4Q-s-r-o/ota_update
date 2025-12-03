@@ -66,7 +66,7 @@ class _MyAppState extends State<MyApp> {
                 ),
                 const Text(
                   'Legacy mode uses Intent.ACTION_INSTALL_PACKAGE to trigger system installation UI. '
-                  'As simple it is, the operating system will never provide result of the installation '
+                  'As simple it is, the operating system will never provide result of the installation ',
                 ),
                 Padding(
                   padding: const EdgeInsets.all(8.0),
