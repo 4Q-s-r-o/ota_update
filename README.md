@@ -94,6 +94,22 @@ Add permissions to AndroidManifest.xml.
 <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES"/>
 ```
 
+#### PackageInstaller method
+Since version ```7.1.0``` the plugin supports ```PackageInstaller``` method for installing APKs. This method is default for **system apps** as it allows silent installation (more in next section).
+
+For **regular apps** this includes reporting of installation progress via plugin and notification after installation result (hovewer upon successfull installation, the OS may restart app). One caveat when using this method is that OS no longer provides nice UI with installation progress, so it is more suited for apps that want to handle progress notifications themselves.
+
+Because of this, the ```PackageInstaller``` method is not enabled by default but you need to opt in by passing ```usePackageInstaller: true``` to ```execute``` method.
+
+Plase note, that when you want to ensure progress reporting works as intented you need to add following receiver referrence to AndroidManifest.xml inside ```<application>``` node. 
+
+```xml
+<receiver android:name="sk.fourq.otaupdate.InstallResultReceiver"  android:exported="false">
+    <intent-filter>
+        <action android:name="${applicationId}.ACTION_INSTALL_COMPLETE"/>
+    </intent-filter>
+</receiver>
+```
 #### Silent Installation (System Apps Only)
 This plugin automatically supports silent installation for system apps without user interaction. The plugin includes the `INSTALL_PACKAGES` permission which enables this feature.
 
@@ -121,6 +137,16 @@ Add following provider referrence to AndroidManifest.xml inside ```<application>
         android:resource="@xml/filepaths" />
 </provider>
 ```
+Add following receiver referrence to AndroidManifest.xml inside ```<application>``` node.
+```xml
+<receiver android:name="sk.fourq.otaupdate.InstallResultReceiver"  android:exported="false">
+    <intent-filter>
+        <action android:name="${applicationId}.ACTION_INSTALL_COMPLETE"/>
+    </intent-filter>
+</receiver>
+```
+When using silent installation, or ```PackageInstaller``` method, this allows plugin to get result of installation.
+
 See [AndroidManifest.xml](example/android/app/src/main/AndroidManifest.xml) in example
 
 Also, create the file ```android/src/main/res/xml/filepaths.xml``` with following contents. 
@@ -177,32 +203,40 @@ Plugin now allows you to get android ABI platform. If your are building multiple
     * event value is download progress percentage
 * INSTALLING: 
     * event status that is sent just before triggering installation intent
-    * event value is null
+    * event value is always null on first call
+    * event value is installation progress percentage when using ```PackageInstaller``` method.
+* INSTALLATION_DONE:
+    * only sent when using ```PackageInstaller``` method
+    * indicates that the update has been successfully installed
 * ALREADY_RUNNING_ERROR: 
-    * sent when 'execute' method is called before previous run finished
+    * sent when the 'execute' method is called before previous run finished
     * event value is null
+* INSTALLATION_ERROR:
+    * only sent when using ```PackageInstaller``` method
+    * indicates that installation resulted in an error
+    * some devices may trigger this when the user clicks on cancel, but it is not always the case
 * PERMISSION_NOT_GRANTED_ERROR: 
-    * sent when user refused to grant required permissions
+    * sent when the user refused to grant required permissions
     * event value is null.
 * DOWNLOAD_ERROR
     * sent when download crashed.
 * CHECKSUM_ERROR (android only)
-    * sent if calculated SHA-256 checksum does not match provided (optional) value 
+    * sent if calculated SHA-256 checksum does not match the provided (optional) value 
     * sent if checksum value should be verified, but checksum calculation failed  
 * INTERNAL_ERROR: 
     * sent in all other error cases
-    * event value is underlying error message
+    * event value is the underlying error message
 * CANCELED:
   * sent when the download was canceled using 'OtaUpdate().cancel()'
 
 ## TODO
-* restrict download to specific connection type (mobile, wifi)
+* restrict download to a specific connection type (mobile, wifi)
 
 ## Contribution and Support
 * Contributions are welcome!
 * If you find a bug or want a feature, please fill an issue
-* If you want to contribute code please create a PR
+* If you want to contribute code, please create a PR
 
 ### PR guidelines
 
-* Please do not change version in pubspec.yaml nor update CHANGELOG.md - this will be done before release of new version as release may contain multiple fixes and/or features. This will prevent some potential (yet simple) merge  conflicts.
+* Please do not change a version in pubspec.yaml nor update CHANGELOG.md - this will be done before release of the new version as release may contain multiple fixes and/or features. This will prevent some potential (yet simple) merge  conflicts.
