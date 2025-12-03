@@ -371,7 +371,7 @@ public class OtaUpdatePlugin implements
      */
     private void executeInstallation(Uri fileUri, File downloadedFile) {
         // Try silent installation for system apps first
-        if (hasInstallPackagesPermission() && usePackageInstaller) {
+        if (hasInstallPackagesPermission()) {
             Log.d(TAG, "App has INSTALL_PACKAGES, using package installer");
             installUsingPackageInstaller(downloadedFile);
             return;
