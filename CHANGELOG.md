@@ -1,3 +1,8 @@
+# 7.1.0
+* New installation method that uses ```PackageInstaller``` (opt-in)
+  * Support for silent update of system apps (frananleo)
+  * New statuses are published for ```PackageInstaller``` method
+* Fixed bug when status is stuck at ```DOWNLOADING``` forewer if server providing apk crashes.
 # 7.0.2
 * Migration to flutter 3.32
 # 7.0.1

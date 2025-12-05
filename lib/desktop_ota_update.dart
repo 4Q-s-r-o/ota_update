@@ -72,7 +72,9 @@ class DesktopOtaUpdate {
               Process.start('bash', <String>['-c', 'nohup sh "${Directory.current.path}/temp.sh"']);
             }
           }
-          controller.close();
+          controller
+            ..add(OtaEvent(OtaStatus.INSTALLATION_DONE, null))
+            ..close();
         });
     return controller.stream;
   }

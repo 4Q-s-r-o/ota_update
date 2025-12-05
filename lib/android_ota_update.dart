@@ -21,7 +21,7 @@ class AndroidOtaUpdate {
     return _methodChannel.invokeMethod<void>('cancel');
   }
 
-  /// Execute download and installation of the plugin.
+  /// Execute download and instalation of the plugin.
   /// Download progress and all success or error states are publish in stream as OtaEvent
   Stream<OtaEvent> execute(
     String url, {
@@ -29,6 +29,7 @@ class AndroidOtaUpdate {
     String? androidProviderAuthority,
     String? destinationFilename,
     String? sha256checksum,
+    bool usePackageInstaller = false,
   }) {
     if (destinationFilename != null && destinationFilename.contains('/')) {
       throw OtaUpdateException('Invalid filename $destinationFilename');
@@ -42,19 +43,20 @@ class AndroidOtaUpdate {
             'filename': destinationFilename,
             'checksum': sha256checksum,
             'headers': jsonEncode(headers),
+            'usePackageInstaller': usePackageInstaller ? 'true' : 'false',
           })
           .listen((dynamic event) {
             final OtaEvent otaEvent = _toOtaEvent(event.cast<String>());
             controller.add(otaEvent);
-            if (otaEvent.status != OtaStatus.DOWNLOADING) {
-              controller.close();
-            }
           })
-          .onError((Object error) {
-            if (error is PlatformException) {
-              controller.add(_toOtaEvent(<String?>[error.code, error.message]));
-            }
-          });
+        ..onDone(() {
+          controller.close();
+        })
+        ..onError((Object error) {
+          if (error is PlatformException) {
+            controller.add(_toOtaEvent(<String?>[error.code, error.message]));
+          }
+        });
       _progressStream = controller.stream;
     }
     return _progressStream!;

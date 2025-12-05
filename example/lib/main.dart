@@ -18,10 +18,9 @@ class _MyAppState extends State<MyApp> {
   @override
   void initState() {
     super.initState();
-    tryOtaUpdate();
   }
 
-  Future<void> tryOtaUpdate() async {
+  Future<void> tryOtaUpdate(bool packageInstaller) async {
     try {
       if (Platform.isAndroid) {
         print('ABI Platform: ${await AndroidOtaUpdate().getAbi()}');
@@ -54,14 +53,44 @@ class _MyAppState extends State<MyApp> {
 
   @override
   Widget build(BuildContext context) {
-    if (currentEvent == null) {
-      return Container();
-    }
     return MaterialApp(
       home: Scaffold(
-        appBar: AppBar(title: const Text('Plugin example app')),
-        body: Center(
-          child: Text('OTA status: ${currentEvent?.status} : ${currentEvent?.value} \n'),
+        appBar: AppBar(title: const Text('OTA update example app')),
+        body: Padding(
+          padding: const EdgeInsets.all(16.0),
+          child: Center(
+            child: Column(
+              children: <Widget>[
+                const Text(
+                  'ota_update has two basic modes in which it can download apk. '
+                  'The newer and prefered method is using PackageInstaller. '
+                  'This allows us to report INSTALL result and progress, '
+                  'hovewer presenting progress to user is left to integrating app. '
+                  'This is actually good for app that wish to present progress in their own UI. '
+                  'Additionally, in some cases this method may result in silent update (system apps).',
+                ),
+                Padding(
+                  padding: const EdgeInsets.all(8.0),
+                  child: ElevatedButton(
+                    onPressed: () => tryOtaUpdate(true),
+                    child: const Text('Try using packageInstaller'),
+                  ),
+                ),
+                const Text(
+                  'Legacy mode uses Intent.ACTION_INSTALL_PACKAGE to trigger system installation UI. '
+                  'As simple it is, the operating system will never provide result of the installation ',
+                ),
+                Padding(
+                  padding: const EdgeInsets.all(8.0),
+                  child: ElevatedButton(
+                    onPressed: () => tryOtaUpdate(false),
+                    child: const Text('Try using legacy method'),
+                  ),
+                ),
+                Text('OTA status: ${currentEvent?.status} : ${currentEvent?.value} \n'),
+              ],
+            ),
+          ),
         ),
       ),
     );

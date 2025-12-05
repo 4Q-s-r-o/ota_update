@@ -5,6 +5,7 @@
          to allow setting breakpoints, to provide hot reload, etc.
     -->
     <uses-permission android:name="android.permission.INTERNET"/>
+    <uses-permission android:name="android.permission.INSTAL_PACKAGES"/>
 
 
     <application
@@ -41,5 +42,10 @@
                     android:name="android.support.FILE_PROVIDER_PATHS"
                     android:resource="@xml/filepaths" />
         </provider>
+        <receiver android:name="sk.fourq.otaupdate.InstallResultReceiver"  android:exported="false">
+            <intent-filter>
+                <action android:name="${applicationId}.ACTION_INSTALL_COMPLETE"/>
+            </intent-filter>
+        </receiver>
     </application>
 </manifest>
