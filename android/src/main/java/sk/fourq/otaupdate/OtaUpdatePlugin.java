@@ -73,13 +73,8 @@ public class OtaUpdatePlugin implements
     private static final String STREAM_CHANNEL = "sk.fourq.ota_update/stream";
     private static final String METHOD_CHANNEL = "sk.fourq.ota_update/method";
 
-    // THIS IS TEMPORARY ACCESSOR, THAT IS CLEARED WHEN PLUGIN IS DETACHED FROM ENGINE
-    private static OtaUpdatePlugin instance;
+    // CONTENT LENGTH FOR PROGRESS REPORTING
     private Long contentLength;
-
-    public static OtaUpdatePlugin getInstance() {
-        return instance;
-    }
 
     //BASIC PLUGIN STATE
     private Context context;
@@ -111,7 +106,6 @@ public class OtaUpdatePlugin implements
         Log.d(TAG, "onDetachedFromEngine");
         context = null;
         messanger = null;
-        OtaUpdatePlugin.instance = null;
     }
 
     //FLUTTER EMBEDDING V2 - ACTIVITY BINDING. PLUGIN USES ACTIVITY FOR PERMISSION REQUESTS
@@ -519,7 +513,6 @@ public class OtaUpdatePlugin implements
      */
     private void initialize(Context context, BinaryMessenger messanger) {
         this.context = context;
-        OtaUpdatePlugin.instance = this;
         handler = new Handler(context.getMainLooper()) {
             @Override
             public void handleMessage(Message msg) {
@@ -536,7 +529,25 @@ public class OtaUpdatePlugin implements
                 }
             }
         };
-        installSessionCallback = new InstallSessionCallback();
+
+        // Set callback for install session callback
+        installSessionCallback = new InstallSessionCallback(progress -> {
+            reportStatus(false, OtaStatus.INSTALLING, "", null, (int) Math.floor(progress * 100));
+        });
+
+        // Set callback for install result receiver
+        InstallResultReceiver.InstallResultCallback installResultCallback = new InstallResultReceiver.InstallResultCallback() {
+                @Override
+                public void onInstallSuccess(String message) {
+                    reportStatus(true, OtaStatus.INSTALLATION_DONE, message, null, null);
+                }
+                @Override
+                public void onInstallFailure(String message) {
+                    reportStatus(true, OtaStatus.INSTALLATION_ERROR, message, null, null);
+                }
+            };
+        InstallResultReceiver.setCallback(installResultCallback);
+
         final EventChannel progressChannel = new EventChannel(messanger, STREAM_CHANNEL);
         progressChannel.setStreamHandler(this);
 
@@ -573,19 +584,6 @@ public class OtaUpdatePlugin implements
             }
         }
     }
-
-    public void onInstallSuccess(String message) {
-        reportStatus(true, OtaStatus.INSTALLATION_DONE, message, null, null);
-    }
-
-    public void onInstallFailure(String message) {
-        reportStatus(true, OtaStatus.INSTALLATION_ERROR, message, null, null);
-    }
-
-    public void onInstallProgress(float progress) {
-        reportStatus(false, OtaStatus.INSTALLING, "", null, (int) Math.floor(progress * 100));
-    }
-
     private void closeSink() {
         if (progressSink != null) {
             progressSink.endOfStream();
