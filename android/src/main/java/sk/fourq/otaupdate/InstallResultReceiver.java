@@ -41,10 +41,12 @@ public class InstallResultReceiver extends BroadcastReceiver {
             return;
         }
 
-        if (status == PackageInstaller.STATUS_SUCCESS) {
-            callback.onInstallSuccess(msg);
-        } else {
-            callback.onInstallFailure(msg);
+        if (callback != null) {
+            if (status == PackageInstaller.STATUS_SUCCESS) {
+                callback.onInstallSuccess(msg);
+            } else {
+                callback.onInstallFailure(msg);
+            }
         }
     }
 
