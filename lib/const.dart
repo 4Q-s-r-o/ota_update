@@ -1,3 +1,4 @@
+/// OtaEvent
 class OtaEvent {
   ///Constructor for OtaEvent
   OtaEvent(this.status, this.value);
