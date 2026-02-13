@@ -12,6 +12,7 @@ class OtaUpdate {
     Map<String, String> headers = const <String, String>{},
     String? destinationFilename,
     String? sha256checksum,
+    bool usePackageInstaller = false,
   }) {
     if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) {
       return desktop.DesktopOtaUpdate().execute(
@@ -26,6 +27,7 @@ class OtaUpdate {
         headers: headers,
         destinationFilename: destinationFilename,
         sha256checksum: sha256checksum,
+        usePackageInstaller: usePackageInstaller,
       );
     }
     throw OtaUpdateException('not supported on this platform');
