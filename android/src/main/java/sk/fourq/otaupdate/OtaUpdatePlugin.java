@@ -73,13 +73,8 @@ public class OtaUpdatePlugin implements
     private static final String STREAM_CHANNEL = "sk.fourq.ota_update/stream";
     private static final String METHOD_CHANNEL = "sk.fourq.ota_update/method";
 
-    // THIS IS TEMPORARY ACCESSOR, THAT IS CLEARED WHEN PLUGIN IS DETACHED FROM ENGINE
-    private static OtaUpdatePlugin instance;
+    // CONTENT LENGTH FOR PROGRESS REPORTING
     private Long contentLength;
-
-    public static OtaUpdatePlugin getInstance() {
-        return instance;
-    }
 
     //BASIC PLUGIN STATE
     private Context context;
@@ -111,7 +106,6 @@ public class OtaUpdatePlugin implements
         Log.d(TAG, "onDetachedFromEngine");
         context = null;
         messanger = null;
-        OtaUpdatePlugin.instance = null;
     }
 
     //FLUTTER EMBEDDING V2 - ACTIVITY BINDING. PLUGIN USES ACTIVITY FOR PERMISSION REQUESTS
@@ -436,6 +430,20 @@ public class OtaUpdatePlugin implements
                             ? PendingIntent.FLAG_MUTABLE
                             : PendingIntent.FLAG_UPDATE_CURRENT);
 
+            // Set callback now so this instance (the one with progressSink set) receives the result.
+            // If we only set it in initialize(), a recreated plugin instance would overwrite it and
+            // that instance has progressSink == null.
+            InstallResultReceiver.setCallback(new InstallResultReceiver.InstallResultCallback() {
+                @Override
+                public void onInstallSuccess(String message) {
+                    reportStatus(true, OtaStatus.INSTALLATION_DONE, message, null, null);
+                }
+                @Override
+                public void onInstallFailure(String message) {
+                    reportStatus(true, OtaStatus.INSTALLATION_ERROR, message, null, null);
+                }
+            });
+
             // Commit the session. This hands control over to the system to actually perform the install.
             // The provided IntentSender will be invoked with the result of the installation.
             session.commit(pendingIntent.getIntentSender());
@@ -483,19 +491,22 @@ public class OtaUpdatePlugin implements
             if (otaStatus.isError()) {
                 Log.e(TAG, "ERROR: " + s, e);
             }
-            if (progressSink != null) {
-                if (otaStatus.isError()) {
-                    progressSink.error("" + otaStatus.ordinal(), s, null);
+              if (progressSink != null) {
+                // Always send status as a success payload [ordinal, message] so the Dart stream
+                // receives it in onData. Using progressSink.error() would deliver to onError and
+                // the listener would never get an OtaEvent (e.g. INSTALLATION_ERROR / downgrade).
+                List<String> responseArgs = new ArrayList<>(2);
+                responseArgs.add("" + otaStatus.ordinal());
+                if (arg != null) {
+                    responseArgs.add(arg.toString());
+                } else if (s != null) {
+                    responseArgs.add(s);
                 } else {
-                    List<String> responseArgs = new ArrayList<>(2);
-                    responseArgs.add("" + otaStatus.ordinal());
-                    if (arg != null) {
-                        responseArgs.add(arg.toString());
-                    } else {
-                        responseArgs.add("");
-                    }
-                    progressSink.success(responseArgs);
+                    responseArgs.add("");
                 }
+                progressSink.success(responseArgs);
+                // Defer close so the engine can deliver the success event to Dart before the
+                // stream is closed. Calling endOfStream() immediately can drop the last event.
                 if (closeSink) {
                     closeSink();
                 }
@@ -519,7 +530,6 @@ public class OtaUpdatePlugin implements
      */
     private void initialize(Context context, BinaryMessenger messanger) {
         this.context = context;
-        OtaUpdatePlugin.instance = this;
         handler = new Handler(context.getMainLooper()) {
             @Override
             public void handleMessage(Message msg) {
@@ -536,7 +546,17 @@ public class OtaUpdatePlugin implements
                 }
             }
         };
-        installSessionCallback = new InstallSessionCallback();
+
+        // Set callback for install session callback
+        installSessionCallback = new InstallSessionCallback(progress -> {
+            reportStatus(false, OtaStatus.INSTALLING, "", null, (int) Math.floor(progress * 100));
+        });
+
+        // Install result callback is set in installUsingPackageInstaller() right before commit(),
+        // so the instance that started the install (and has progressSink set) receives the result.
+        // Do not set it here: if the plugin is recreated (e.g. engine reattach), a new instance
+        // would overwrite the callback and that instance has progressSink == null.
+
         final EventChannel progressChannel = new EventChannel(messanger, STREAM_CHANNEL);
         progressChannel.setStreamHandler(this);
 
@@ -573,19 +593,10 @@ public class OtaUpdatePlugin implements
             }
         }
     }
-
-    public void onInstallSuccess(String message) {
-        reportStatus(true, OtaStatus.INSTALLATION_DONE, message, null, null);
-    }
-
-    public void onInstallFailure(String message) {
-        reportStatus(true, OtaStatus.INSTALLATION_ERROR, message, null, null);
-    }
-
-    public void onInstallProgress(float progress) {
-        reportStatus(false, OtaStatus.INSTALLING, "", null, (int) Math.floor(progress * 100));
-    }
-
+    /**
+     * Single place that disposes the stream: endOfStream() and null the sink.
+     * Only call when the stream is truly done (result sent, or cancel/error path).
+     */
     private void closeSink() {
         if (progressSink != null) {
             progressSink.endOfStream();
