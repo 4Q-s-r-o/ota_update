@@ -10,6 +10,17 @@ import android.util.Log;
 public class InstallResultReceiver extends BroadcastReceiver {
 
     public static final String ACTION_INSTALL_COMPLETE = "ACTION_INSTALL_COMPLETE";
+    
+    private static InstallResultCallback callback;
+
+    public interface InstallResultCallback {
+        void onInstallSuccess(String message);
+        void onInstallFailure(String message);
+    }
+
+    public static void setCallback(InstallResultCallback cb) {
+        InstallResultReceiver.callback = cb;
+    }
 
     @Override
     public void onReceive(Context context, Intent intent) {
@@ -29,12 +40,12 @@ public class InstallResultReceiver extends BroadcastReceiver {
             }
             return;
         }
-        OtaUpdatePlugin instance = OtaUpdatePlugin.getInstance();
-        if (instance != null) {
+
+        if (callback != null) {
             if (status == PackageInstaller.STATUS_SUCCESS) {
-                instance.onInstallSuccess(msg);
+                callback.onInstallSuccess(msg);
             } else {
-                instance.onInstallFailure(msg);
+                callback.onInstallFailure(msg);
             }
         }
     }
