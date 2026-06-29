@@ -87,6 +87,8 @@ import 'package:ota_update/ota_update.dart';
         destinationFilename: 'flutter_hello_world.apk',
         //OPTIONAL, ANDROID ONLY - ABILITY TO VALIDATE CHECKSUM OF FILE:
         sha256checksum: "d6da28451a1e15cf7a75f2c3f151befad3b80ad0bb232ab15c20897e54f21478",
+        //OPTIONAL, ANDROID ONLY - USE MULTIPLE HTTP RANGE REQUESTS WHEN SUPPORTED:
+        parallelDownloads: 4,
       ).listen(
         (OtaEvent event) {
           setState(() => currentEvent = event);
@@ -212,6 +214,19 @@ Since this plugin only handles download and installation, there are still a few 
 
 This package supports sha256 checksum verification of the file integrity. This allows as to detect if file has been corrupted during transfer.
 To use this feature, your update server should provide you with sha256 checksum of APK and you need to obtain this value while you are checking for update. When you run ```execute``` method with this parameter, plugin will compute sha256 value from downloaded file and compare with provided value. The update will continiue only if the two values match, otherwise it throws error.
+
+#### Using parallelDownloads (Android only)
+
+By default the plugin downloads APKs with a single HTTP request, preserving the historical behavior. If your update server supports HTTP range requests, you can opt in to a parallel download by setting ```parallelDownloads``` to a value greater than 1:
+
+```dart
+OtaUpdate().execute(
+  apkUrl,
+  parallelDownloads: 4,
+);
+```
+
+The Android implementation first probes the server with a range request. If the server does not return a valid ```206 Partial Content``` response with a total size, the plugin automatically falls back to the default single request download. Values above 8 are capped.
 
 #### Using split apks (experimental)
 

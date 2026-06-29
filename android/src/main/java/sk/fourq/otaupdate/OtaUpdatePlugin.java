@@ -31,6 +31,7 @@ import okhttp3.Request;
 import okhttp3.Response;
 import okhttp3.internal.http2.StreamResetException;
 import okio.BufferedSink;
+import okio.BufferedSource;
 import okio.Okio;
 import org.jetbrains.annotations.NotNull;
 import org.json.JSONException;
@@ -41,11 +42,15 @@ import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.io.RandomAccessFile;
 import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
 
 /**
  * OtaUpdatePlugin
@@ -68,10 +73,12 @@ public class OtaUpdatePlugin implements
     private static final String ARG_FILENAME = "filename";
     private static final String ARG_CHECKSUM = "checksum";
     private static final String ARG_ANDROID_PROVIDER_AUTHORITY = "androidProviderAuthority";
+    private static final String ARG_PARALLEL_DOWNLOADS = "parallelDownloads";
     public static final String TAG = "FLUTTER OTA";
     private static final String DEFAULT_APK_NAME = "ota_update.apk";
     private static final String STREAM_CHANNEL = "sk.fourq.ota_update/stream";
     private static final String METHOD_CHANNEL = "sk.fourq.ota_update/method";
+    private static final int MAX_PARALLEL_DOWNLOADS = 8;
 
     // CONTENT LENGTH FOR PROGRESS REPORTING
     private Long contentLength;
@@ -84,15 +91,21 @@ public class OtaUpdatePlugin implements
     private String androidProviderAuthority;
     private BinaryMessenger messanger;
     private OkHttpClient client;
+    private OkHttpClient rawClient;
     private InstallSessionCallback installSessionCallback;
 
     //DOWNLOAD SPECIFIC PLUGIN STATE. PLUGIN SUPPORT ONLY ONE DOWNLOAD AT A TIME
+    private final Object callsLock = new Object();
+    private final List<Call> currentCalls = new ArrayList<>();
     private Call currentCall;
     private String downloadUrl;
     private JSONObject headers;
     private String filename;
     private String checksum;
     private boolean usePackageInstaller = false;
+    private int parallelDownloads = 1;
+    private volatile boolean downloadRunning = false;
+    private volatile boolean downloadCancelled = false;
 
     //FLUTTER EMBEDDING V2 - PLUGIN BINDING
     @Override
@@ -138,9 +151,9 @@ public class OtaUpdatePlugin implements
         if (call.method.equals("getAbi")) {
             result.success(Build.SUPPORTED_ABIS[0]);
         } else if (call.method.equals("cancel")) {
-            if (currentCall != null) {
-                currentCall.cancel();
-                currentCall = null;
+            if (downloadRunning || hasActiveCalls()) {
+                cancelActiveCalls();
+                downloadRunning = false;
                 reportStatus(true, OtaStatus.CANCELED, "Call was canceled using cancel()", null, null);
             }
             result.success(null);
@@ -165,11 +178,16 @@ public class OtaUpdatePlugin implements
             reportStatus(true, OtaStatus.INTERNAL_ERROR, "Invalid arguments passed to onListen()", ex, null);
             return;
         }
+        headers = null;
+        checksum = null;
+        usePackageInstaller = false;
+        parallelDownloads = 1;
         downloadUrl = argumentsMap.get(ARG_URL);
         String rawUsePackageInstaller = argumentsMap.get(ARG_USE_PACKAGE_INSTALLER);
         if (rawUsePackageInstaller != null) {
             usePackageInstaller = rawUsePackageInstaller.equals("true");
         }
+        parallelDownloads = parseParallelDownloads(argumentsMap.get(ARG_PARALLEL_DOWNLOADS));
         try {
             String headersJson = argumentsMap.get(ARG_HEADERS);
             if (headersJson != null && !headersJson.isEmpty()) {
@@ -200,9 +218,26 @@ public class OtaUpdatePlugin implements
         throw new IllegalArgumentException();
     }
 
+    private int parseParallelDownloads(String rawParallelDownloads) {
+        if (rawParallelDownloads == null) {
+            return 1;
+        }
+        try {
+            int parsed = Integer.parseInt(rawParallelDownloads);
+            return Math.max(1, Math.min(parsed, MAX_PARALLEL_DOWNLOADS));
+        } catch (NumberFormatException ex) {
+            Log.w(TAG, "Invalid parallelDownloads value: " + rawParallelDownloads, ex);
+            return 1;
+        }
+    }
+
     @Override
     public void onCancel(Object o) {
         Log.d(TAG, "STREAM CLOSED");
+        if (downloadRunning || hasActiveCalls()) {
+            cancelActiveCalls();
+            downloadRunning = false;
+        }
         closeSink();
     }
 
@@ -230,10 +265,13 @@ public class OtaUpdatePlugin implements
      */
     private void executeDownload() {
         try {
-            if (currentCall != null) {
+            if (downloadRunning) {
                 reportStatus(true, OtaStatus.ALREADY_RUNNING_ERROR, "Another download (call) is already running", null, null);
                 return;
             }
+            downloadRunning = true;
+            downloadCancelled = false;
+            contentLength = null;
 
             String dataDir = context.getApplicationInfo().dataDir + "/files/ota_update";
             //PREPARE URLS
@@ -248,58 +286,338 @@ public class OtaUpdatePlugin implements
                 }
             } else if (file.getParentFile() != null && !file.getParentFile().exists()) {
                 if (!file.getParentFile().mkdirs()) {
+                    clearActiveCallReferences();
                     reportStatus(true, OtaStatus.INTERNAL_ERROR, "unable to create ota_update folder in internal storage", null, null);
+                    return;
                 }
             }
 
-            Log.d(TAG, "DOWNLOAD STARTING");
-            Request.Builder request = new Request.Builder()
-                    .url(downloadUrl);
-            if (headers != null) {
-                Iterator<String> jsonKeys = headers.keys();
-                while (jsonKeys.hasNext()) {
-                    String headerName = jsonKeys.next();
-                    String headerValue = headers.getString(headerName);
-                    request.addHeader(headerName, headerValue);
+            if (parallelDownloads > 1) {
+                Log.d(TAG, "DOWNLOAD STARTING WITH " + parallelDownloads + " CONNECTIONS");
+                startParallelDownload(destination, fileUri, file);
+            } else {
+                Log.d(TAG, "DOWNLOAD STARTING");
+                startSingleDownload(destination, fileUri, file);
+            }
+        } catch (Exception e) {
+            clearActiveCallReferences();
+            reportStatus(true, OtaStatus.INTERNAL_ERROR, e.getMessage(), e, null);
+        }
+    }
+
+    private void startSingleDownload(final String destination, final Uri fileUri, final File file) throws JSONException {
+        if (downloadCancelled) {
+            clearActiveCallReferences();
+            return;
+        }
+        Request.Builder request = buildRequest(downloadUrl);
+
+        currentCall = client.newCall(request.build());
+        currentCall.enqueue(new Callback() {
+            @Override
+            public void onFailure(@NotNull Call call, @NotNull IOException e) {
+                if (downloadCancelled) {
+                    clearActiveCallReferences();
+                    return;
+                }
+                clearActiveCallReferences();
+                reportStatus(true, OtaStatus.DOWNLOAD_ERROR, e.getMessage(), e, null);
+            }
+
+            @Override
+            public void onResponse(@NotNull Call call, @NotNull Response response) {
+                try {
+                    if (downloadCancelled) {
+                        return;
+                    }
+                    if (!response.isSuccessful()) {
+                        clearActiveCallReferences();
+                        reportStatus(true, OtaStatus.DOWNLOAD_ERROR, "Http request finished with status " + response.code(), null, null);
+                        return;
+                    }
+                    try (BufferedSink sink = Okio.buffer(Okio.sink(file))) {
+                        if (response.body() != null) {
+                            sink.writeAll(response.body().source());
+                        }
+                    }
+                } catch (StreamResetException ex) {
+                    // Thrown when the call was canceled using 'cancel()'
+                    return;
+                } catch (IOException | RuntimeException ex) {
+                    clearActiveCallReferences();
+                    reportStatus(true, OtaStatus.DOWNLOAD_ERROR, ex.getMessage(), ex, null);
+                    return;
+                } finally {
+                    response.close();
+                }
+                clearActiveCallReferences();
+                onDownloadComplete(destination, fileUri);
+            }
+        });
+    }
+
+    private void startParallelDownload(final String destination, final Uri fileUri, final File file) throws JSONException {
+        Request probeRequest = buildRequest(downloadUrl)
+                .header("Range", "bytes=0-0")
+                .build();
+        currentCall = rawClient.newCall(probeRequest);
+        currentCall.enqueue(new Callback() {
+            @Override
+            public void onFailure(@NotNull Call call, @NotNull IOException e) {
+                if (downloadCancelled) {
+                    clearActiveCallReferences();
+                    return;
+                }
+                Log.w(TAG, "Range probe failed. Falling back to single connection download.", e);
+                currentCall = null;
+                try {
+                    startSingleDownload(destination, fileUri, file);
+                } catch (JSONException ex) {
+                    clearActiveCallReferences();
+                    reportStatus(true, OtaStatus.DOWNLOAD_ERROR, ex.getMessage(), ex, null);
                 }
             }
 
-            currentCall = client.newCall(request.build());
-            currentCall.enqueue(new Callback() {
+            @Override
+            public void onResponse(@NotNull Call call, @NotNull Response response) {
+                try {
+                    currentCall = null;
+                    if (downloadCancelled) {
+                        return;
+                    }
+                    long totalLength = parseTotalLengthFromContentRange(response.header("Content-Range"));
+                    if (response.code() != 206 || totalLength < 1) {
+                        Log.d(TAG, "Server does not support range requests. Falling back to single connection download.");
+                        startSingleDownload(destination, fileUri, file);
+                        return;
+                    }
+                    startRangeDownloads(destination, fileUri, file, totalLength);
+                } catch (JSONException ex) {
+                    clearActiveCallReferences();
+                    reportStatus(true, OtaStatus.DOWNLOAD_ERROR, ex.getMessage(), ex, null);
+                } finally {
+                    response.close();
+                }
+            }
+        });
+    }
+
+    private void startRangeDownloads(final String destination, final Uri fileUri, final File file, final long totalLength) throws JSONException {
+        if (downloadCancelled) {
+            clearActiveCallReferences();
+            return;
+        }
+        int connectionCount = (int) Math.min(parallelDownloads, totalLength);
+        if (connectionCount <= 1) {
+            startSingleDownload(destination, fileUri, file);
+            return;
+        }
+
+        try (RandomAccessFile randomAccessFile = new RandomAccessFile(file, "rw")) {
+            randomAccessFile.setLength(totalLength);
+        } catch (IOException | RuntimeException ex) {
+            clearActiveCallReferences();
+            reportStatus(true, OtaStatus.DOWNLOAD_ERROR, ex.getMessage(), ex, null);
+            return;
+        }
+
+        contentLength = totalLength;
+        reportDownloadProgress(0, totalLength);
+
+        AtomicInteger completedParts = new AtomicInteger(0);
+        AtomicBoolean finished = new AtomicBoolean(false);
+        AtomicLong totalDownloaded = new AtomicLong(0);
+
+        for (int i = 0; i < connectionCount; i++) {
+            final long start = (totalLength * i) / connectionCount;
+            final long end = ((totalLength * (i + 1)) / connectionCount) - 1;
+            final int partIndex = i;
+
+            Request partRequest = buildRequest(downloadUrl)
+                    .header("Range", "bytes=" + start + "-" + end)
+                    .build();
+            Call partCall = rawClient.newCall(partRequest);
+            addActiveCall(partCall);
+            partCall.enqueue(new Callback() {
                 @Override
                 public void onFailure(@NotNull Call call, @NotNull IOException e) {
-                    reportStatus(true, OtaStatus.DOWNLOAD_ERROR, e.getMessage(), e, null);
-                    currentCall = null;
+                    removeActiveCall(call);
+                    if (downloadCancelled || finished.get()) {
+                        return;
+                    }
+                    failParallelDownload(finished, "Part " + partIndex + " failed: " + e.getMessage(), e);
                 }
 
                 @Override
                 public void onResponse(@NotNull Call call, @NotNull Response response) {
-                    if (!response.isSuccessful()) {
-                        reportStatus(true, OtaStatus.DOWNLOAD_ERROR, "Http request finished with status " + response.code(), null, null);
-                    }
                     try {
-                        BufferedSink sink = Okio.buffer(Okio.sink(file));
-                        if (response.body() != null) {
-                            sink.writeAll(response.body().source());
+                        if (downloadCancelled || finished.get()) {
+                            return;
                         }
-                        sink.close();
+                        if (response.code() != 206 || response.body() == null) {
+                            failParallelDownload(finished, "Part " + partIndex + " finished with status " + response.code(), null);
+                            return;
+                        }
+
+                        long written = writeRangeToFile(
+                                response.body().source(),
+                                file,
+                                start,
+                                totalDownloaded,
+                                totalLength
+                        );
+                        if (written < 0 || downloadCancelled || finished.get()) {
+                            return;
+                        }
+                        long expected = end - start + 1;
+                        if (written != expected) {
+                            failParallelDownload(finished, "Part " + partIndex + " downloaded " + written + " bytes, expected " + expected, null);
+                            return;
+                        }
+
+                        if (completedParts.incrementAndGet() == connectionCount && finished.compareAndSet(false, true)) {
+                            clearActiveCallReferences();
+                            if (file.length() != totalLength) {
+                                reportStatus(true, OtaStatus.DOWNLOAD_ERROR, "Downloaded file size does not match Content-Range total", null, null);
+                                return;
+                            }
+                            onDownloadComplete(destination, fileUri);
+                        }
                     } catch (StreamResetException ex) {
                         // Thrown when the call was canceled using 'cancel()'
-                        currentCall = null;
-                        return;
                     } catch (IOException | RuntimeException ex) {
-                        reportStatus(true, OtaStatus.DOWNLOAD_ERROR, ex.getMessage(), ex, null);
-                        currentCall = null;
-                        return;
+                        if (!downloadCancelled && !finished.get()) {
+                            failParallelDownload(finished, ex.getMessage(), ex);
+                        }
+                    } finally {
+                        response.close();
+                        removeActiveCall(call);
                     }
-                    onDownloadComplete(destination, fileUri);
-                    currentCall = null;
                 }
             });
-        } catch (Exception e) {
-            reportStatus(true, OtaStatus.INTERNAL_ERROR, e.getMessage(), e, null);
+        }
+    }
+
+    private Request.Builder buildRequest(String url) throws JSONException {
+        Request.Builder request = new Request.Builder()
+                .url(url);
+        if (headers != null) {
+            Iterator<String> jsonKeys = headers.keys();
+            while (jsonKeys.hasNext()) {
+                String headerName = jsonKeys.next();
+                String headerValue = headers.getString(headerName);
+                request.addHeader(headerName, headerValue);
+            }
+        }
+        return request;
+    }
+
+    private long parseTotalLengthFromContentRange(String contentRange) {
+        if (contentRange == null) {
+            return -1;
+        }
+        int separatorIndex = contentRange.lastIndexOf('/');
+        if (separatorIndex < 0 || separatorIndex == contentRange.length() - 1) {
+            return -1;
+        }
+        String totalLength = contentRange.substring(separatorIndex + 1).trim();
+        if (totalLength.equals("*")) {
+            return -1;
+        }
+        try {
+            return Long.parseLong(totalLength);
+        } catch (NumberFormatException ex) {
+            Log.w(TAG, "Invalid Content-Range total length: " + contentRange, ex);
+            return -1;
+        }
+    }
+
+    private long writeRangeToFile(
+            BufferedSource source,
+            File file,
+            long start,
+            AtomicLong totalDownloaded,
+            long totalLength
+    ) throws IOException {
+        byte[] buffer = new byte[65536];
+        long partDownloaded = 0;
+        try (RandomAccessFile randomAccessFile = new RandomAccessFile(file, "rw")) {
+            randomAccessFile.seek(start);
+            int bytesRead;
+            while ((bytesRead = source.read(buffer)) != -1) {
+                if (downloadCancelled) {
+                    return -1;
+                }
+                randomAccessFile.write(buffer, 0, bytesRead);
+                partDownloaded += bytesRead;
+                reportDownloadProgress(totalDownloaded.addAndGet(bytesRead), totalLength);
+            }
+        }
+        return partDownloaded;
+    }
+
+    private void reportDownloadProgress(long bytesDownloaded, long bytesTotal) {
+        if (bytesTotal < 1 || progressSink == null) {
+            return;
+        }
+        Message message = new Message();
+        Bundle data = new Bundle();
+        data.putLong(BYTES_DOWNLOADED, bytesDownloaded);
+        data.putLong(BYTES_TOTAL, bytesTotal);
+        message.setData(data);
+        handler.sendMessage(message);
+        contentLength = bytesTotal;
+    }
+
+    private void failParallelDownload(AtomicBoolean finished, String message, Exception e) {
+        if (finished.compareAndSet(false, true)) {
+            cancelActiveCalls();
+            clearActiveCallReferences();
+            reportStatus(true, OtaStatus.DOWNLOAD_ERROR, message, e, null);
+        }
+    }
+
+    private void addActiveCall(Call call) {
+        synchronized (callsLock) {
+            currentCalls.add(call);
+        }
+    }
+
+    private void removeActiveCall(Call call) {
+        synchronized (callsLock) {
+            currentCalls.remove(call);
+        }
+    }
+
+    private boolean hasActiveCalls() {
+        if (currentCall != null) {
+            return true;
+        }
+        synchronized (callsLock) {
+            return !currentCalls.isEmpty();
+        }
+    }
+
+    private void cancelActiveCalls() {
+        downloadCancelled = true;
+        if (currentCall != null) {
+            currentCall.cancel();
             currentCall = null;
         }
+        synchronized (callsLock) {
+            for (Call call : currentCalls) {
+                call.cancel();
+            }
+            currentCalls.clear();
+        }
+    }
+
+    private void clearActiveCallReferences() {
+        currentCall = null;
+        synchronized (callsLock) {
+            currentCalls.clear();
+        }
+        downloadRunning = false;
     }
 
     /**
@@ -570,6 +888,8 @@ public class OtaUpdatePlugin implements
                             .body(new ProgressResponseBody(originalResponse.body(), OtaUpdatePlugin.this))
                             .build();
                 })
+                .build();
+        rawClient = new OkHttpClient.Builder()
                 .build();
     }
 

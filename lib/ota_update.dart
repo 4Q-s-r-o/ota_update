@@ -23,7 +23,12 @@ class OtaUpdate {
   }
 
   /// Execute download and instalation of the plugin.
-  /// Download progress and all success or error states are publish in stream as OtaEvent
+  /// Download progress and all success or error states are publish in stream as OtaEvent.
+  ///
+  /// On Android, [parallelDownloads] can be set above 1 to use multiple HTTP
+  /// range requests when the server supports them. The Android implementation
+  /// falls back to the default single request download when range requests are
+  /// unavailable. Values above 8 are capped by Android code.
   Stream<OtaEvent> execute(
     String url, {
     Map<String, String> headers = const <String, String>{},
@@ -31,9 +36,13 @@ class OtaUpdate {
     String? destinationFilename,
     String? sha256checksum,
     bool usePackageInstaller = false,
+    int parallelDownloads = 1,
   }) {
     if (destinationFilename != null && destinationFilename.contains('/')) {
       throw OtaUpdateException('Invalid filename $destinationFilename');
+    }
+    if (parallelDownloads < 1) {
+      throw OtaUpdateException('parallelDownloads must be greater than 0');
     }
     final StreamController<OtaEvent> controller = StreamController<OtaEvent>.broadcast();
     if (_progressStream == null) {
@@ -45,6 +54,7 @@ class OtaUpdate {
             'checksum': sha256checksum,
             'headers': jsonEncode(headers),
             'usePackageInstaller': usePackageInstaller ? 'true' : 'false',
+            'parallelDownloads': parallelDownloads.toString(),
           })
           .listen((dynamic event) {
             final OtaEvent otaEvent = _toOtaEvent(event.cast<String>());
