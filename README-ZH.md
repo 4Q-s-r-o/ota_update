@@ -88,6 +88,8 @@ try {
       destinationFilename: 'flutter_hello_world.apk',
       // 可选，仅 Android - 能够验证文件的校验和：
       sha256checksum: "d6da28451a1e15cf7a75f2c3f151befad3b80ad0bb232ab15c20897e54f21478",
+      // 可选，仅 Android - 在服务器支持时使用多个 HTTP Range 请求：
+      parallelDownloads: 4,
     ).listen(
       (OtaEvent event) {
         setState(() => currentEvent = event);
@@ -210,6 +212,19 @@ android:networkSecurityConfig="@xml/network_security_config"
 
 此包支持文件完整性的 sha256 校验和验证。这使我们能够检测文件在传输过程中是否已损坏
 要使用此功能，你的更新服务器应向你提供 APK 的 sha256 校验和，并且你需要在检查更新时获取此值。当你使用此参数运行 `execute` 方法时，插件将从下载的文件计算 sha256 值，并与提供的值进行比较。只有当两个值匹配时，更新才会继续，否则会抛出错误。
+
+#### 使用 parallelDownloads（仅 Android）
+
+默认情况下，插件使用单个 HTTP 请求下载 APK，以保持历史行为不变。如果你的更新服务器支持 HTTP Range 请求，可以将 `parallelDownloads` 设置为大于 1 的值来启用并行下载：
+
+```dart
+OtaUpdate().execute(
+  apkUrl,
+  parallelDownloads: 4,
+);
+```
+
+Android 实现会先使用 Range 请求探测服务器能力。如果服务器没有返回有效的 `206 Partial Content` 响应和总大小，插件会自动回退到默认的单请求下载。超过 8 的值会被截断。
 
 #### 使用拆分 apks（实验性）
 
